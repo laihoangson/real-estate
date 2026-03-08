@@ -1,65 +1,205 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Melbourne Property Dashboard</title>
+    <title>Melbourne Property Analytics Dashboard</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        body { background-color: #f4f6f9; padding-bottom: 30px; }
-        #map { height: 500px; width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .stat-card { text-align: center; padding: 20px; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        .stat-value { font-size: 28px; font-weight: bold; color: #0d6efd; }
-        .stat-title { color: #6c757d; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-        .chart-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        body { 
+            background-color: #f4f7fa; 
+            font-family: 'Inter', sans-serif; 
+            color: #334155;
+            padding-bottom: 20px;
+        }
+        
+        /* Modern Header with Gradient */
+        .dashboard-header { 
+            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+            padding: 30px 0; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+            margin-bottom: 30px; 
+            color: white;
+            border-bottom-left-radius: 20px;
+            border-bottom-right-radius: 20px;
+        }
+
+        /* Upgraded Cards */
+        .stat-card { 
+            text-align: center; 
+            padding: 24px 15px; 
+            border-radius: 16px; 
+            background: #fff; 
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.025);
+            margin-bottom: 24px; 
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
+        .stat-value { font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px; letter-spacing: -0.5px; }
+        .stat-title { color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+        
+        /* Containers */
+        .chart-container { 
+            background: #fff; 
+            padding: 24px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+            height: 380px; 
+            position: relative; 
+            margin-bottom: 24px; 
+        }
+        .main-chart-container { height: 550px; }
+        #map { 
+            height: 550px; 
+            width: 100%; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); 
+            z-index: 1;
+            border: 2px solid #fff;
+        }
+
+        /* Filter Section */
+        .filter-section { 
+            background: #fff; 
+            padding: 16px 24px; 
+            border-radius: 16px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
+            margin-bottom: 24px; 
+        }
+        .form-select { border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 500; }
+        .form-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); }
+
+        /* Typography */
+        h5 { font-weight: 700; color: #1e293b; letter-spacing: -0.5px; font-size: 1.1rem; }
+
+        /* Custom Map Popup & Legend */
+        .info.legend { background: rgba(255,255,255,0.9); padding: 12px 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); line-height: 24px; color: #334155; font-size: 13px; font-weight: 600; backdrop-filter: blur(4px); }
+        .info.legend i { width: 14px; height: 14px; float: left; margin-right: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); margin-top: 5px; }
+        
+        /* Customizing Leaflet Popup */
+        .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 5px; }
+        .leaflet-popup-content { margin: 10px 12px; line-height: 1.5; }
+        
+        /* Note box */
+        .footer-note {
+            background: #e0f2fe;
+            border-left: 5px solid #0ea5e9;
+            color: #0369a1;
+            padding: 16px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
     </style>
 </head>
 <body>
 
-<div class="container mt-4">
-    <h2 class="text-center mb-4">🏠 Melbourne Property Dashboard</h2>
+<div class="dashboard-header">
+    <div class="container">
+        <h2 class="m-0 text-center fw-bold d-flex align-items-center justify-content-center">
+            <span style="font-size: 1.2em; margin-right: 10px;">🏘️</span> Melbourne Market Insight
+        </h2>
+        <p class="text-center m-0 mt-2" style="color: #e2e8f0; font-weight: 400; font-size: 1.1rem;">Interactive Real Estate Analytics Dashboard</p>
+    </div>
+</div>
+
+<div class="container-fluid px-xl-5 px-lg-4 px-3">
     
-    <div class="row mb-4 justify-content-center">
-        <div class="col-md-6 text-center">
-            <label for="csvFileInput" class="form-label fw-bold">Chọn file melbourne_full_hybrid_data.csv để tải dữ liệu:</label>
-            <input class="form-control" type="file" id="csvFileInput" accept=".csv">
+    <div class="row">
+        <div class="col-12">
+            <div class="filter-section d-flex flex-wrap align-items-center">
+                <label for="suburbFilter" class="fw-bold me-3 mb-0" style="color: #334155; min-width: 140px; font-size: 15px;">
+                    <i class="me-1">🔍</i> Filter by Suburb:
+                </label>
+                <select id="suburbFilter" class="form-select w-auto min-w-200" style="min-width: 250px;">
+                    <option value="ALL">All Suburbs (Entire Melbourne)</option>
+                    </select>
+                <span class="ms-3 text-muted fw-semibold" id="filterResultText" style="font-size: 14px; color: #64748b !important;"></span>
+            </div>
         </div>
     </div>
 
     <div class="row">
-        <div class="col-md-4">
+        <div class="col-xl-3 col-md-6">
             <div class="stat-card">
-                <div class="stat-title">Tổng số Bất động sản</div>
+                <div class="stat-title">Total Properties</div>
                 <div class="stat-value" id="totalProperties">0</div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-xl-3 col-md-6">
             <div class="stat-card">
-                <div class="stat-title">Giá trung bình (AUD)</div>
-                <div class="stat-value" id="avgPrice">$0</div>
+                <div class="stat-title">Average Price</div>
+                <div class="stat-value" style="color: #10b981;" id="avgPrice">$0</div>
             </div>
         </div>
-        <div class="col-md-4">
+        <div class="col-xl-3 col-md-6">
             <div class="stat-card">
-                <div class="stat-title">Số phòng ngủ TB</div>
-                <div class="stat-value" id="avgBeds">0</div>
+                <div class="stat-title">Avg Bedrooms</div>
+                <div class="stat-value" style="color: #3b82f6;" id="avgBeds">0</div>
+            </div>
+        </div>
+        <div class="col-xl-3 col-md-6">
+            <div class="stat-card">
+                <div class="stat-title">Suburbs Displayed</div>
+                <div class="stat-value" style="color: #8b5cf6;" id="totalSuburbs">0</div>
             </div>
         </div>
     </div>
 
     <div class="row mt-2">
-        <div class="col-md-7">
-            <h5 class="mb-3">🗺️ Bản đồ phân bố</h5>
+        <div class="col-xl-8 col-lg-7 mb-4">
+            <h5 class="mb-3">📍 Property Valuation Map <span style="font-size: 13px; font-weight: 400; color: #64748b;">(Click on points for details)</span></h5>
             <div id="map"></div>
         </div>
         
-        <div class="col-md-5">
-            <h5 class="mb-3">📊 Top 10 Khu vực (Suburb) nhiều nhà nhất</h5>
-            <div class="chart-container">
+        <div class="col-xl-4 col-lg-5 mb-4">
+            <h5 class="mb-3">📊 Top 10 Suburbs by Volume</h5>
+            <div class="chart-container main-chart-container">
                 <canvas id="suburbChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-1">
+        <div class="col-lg-4 col-md-12">
+            <h5 class="mb-3 text-center">🏠 Properties by Type</h5>
+            <div class="chart-container">
+                <canvas id="typeChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="col-lg-4 col-md-12">
+            <h5 class="mb-3 text-center">💰 Price Distribution</h5>
+            <div class="chart-container">
+                <canvas id="priceDistChart"></canvas>
+            </div>
+        </div>
+
+        <div class="col-lg-4 col-md-12">
+            <h5 class="mb-3 text-center">🛏️ Bedrooms Distribution</h5>
+            <div class="chart-container">
+                <canvas id="bedsChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-3 mb-4">
+        <div class="col-12">
+            <div class="footer-note d-flex align-items-center">
+                <span style="font-size: 20px; margin-right: 15px;">💡</span>
+                <div>
+                    <strong>Note for users:</strong> This dashboard directly processes the local <code>melbourne_full_hybrid_data.csv</code> file within your browser. 
+                    No data is uploaded to external servers. Please <b>click on any colored point</b> on the map to view detailed information about the property, including direct links to the original listing source.
+                </div>
             </div>
         </div>
     </div>
@@ -70,130 +210,276 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <script>
-    // 1. Khởi tạo bản đồ Leaflet (Focus vào Melbourne)
+    // Global Config
+    Chart.defaults.font.family = "'Inter', sans-serif";
+    Chart.defaults.color = '#64748b';
+    let globalData = [];
+
+    // 1. Initialize Map
     const map = L.map('map').setView([-37.8136, 144.9631], 10);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+    
+    // Using a cleaner CartoDB light basemap
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; OSM &copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
     }).addTo(map);
 
     let markers = L.layerGroup().addTo(map);
+
+    // Chart instances
     let suburbChartInstance = null;
+    let typeChartInstance = null;
+    let priceDistChartInstance = null;
+    let bedsChartInstance = null;
 
-    // 2. Lắng nghe sự kiện khi người dùng chọn file CSV
-    document.getElementById('csvFileInput').addEventListener('change', function(e) {
-        const file = e.target.files[0];
-        if (!file) return;
+    // Beautiful Color Palette for Prices
+    function getPriceColor(price) {
+        if (!price || isNaN(price)) return '#94a3b8'; // Slate 400
+        if (price < 750000) return '#10b981';  // Emerald 500
+        if (price < 1500000) return '#f59e0b'; // Amber 500
+        if (price < 3000000) return '#f97316'; // Orange 500
+        return '#ef4444';                      // Red 500
+    }
 
-        Papa.parse(file, {
+    // Map Legend
+    const legend = L.control({position: 'bottomright'});
+    legend.onAdd = function (map) {
+        const div = L.DomUtil.create('div', 'info legend');
+        const grades = [0, 750000, 1500000, 3000000];
+        const labels = ['Under $750k', '$750k - $1.5M', '$1.5M - $3M', 'Over $3M'];
+        const colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444'];
+
+        div.innerHTML = '<div style="margin-bottom:8px; font-size:14px; color:#1e293b;"><strong>Price Range</strong></div>';
+        for (let i = 0; i < grades.length; i++) {
+            div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + labels[i] + '<br>';
+        }
+        div.innerHTML += '<i style="background:#94a3b8"></i> Price Withheld';
+        return div;
+    };
+    legend.addTo(map);
+
+    // 2. Load CSV
+    window.onload = function() {
+        Papa.parse("melbourne_full_hybrid_data.csv", {
+            download: true,
             header: true,
             dynamicTyping: true,
             skipEmptyLines: true,
             complete: function(results) {
-                const data = results.data;
-                processData(data);
+                if(results.data && results.data.length > 0) {
+                    globalData = results.data.filter(row => row.Latitude && row.Longitude);
+                    setupFilter(globalData);
+                    processData(globalData); 
+                }
             }
         });
-    });
+    };
 
-    // 3. Hàm xử lý và vẽ dữ liệu
-    function processData(data) {
-        let totalProperties = 0;
-        let totalPrice = 0;
-        let validPriceCount = 0;
-        let totalBeds = 0;
-        let validBedsCount = 0;
+    // 3. Setup Dropdown Filter
+    function setupFilter(data) {
+        const suburbs = [...new Set(data.map(item => item.Suburb).filter(Boolean))].sort();
+        const select = document.getElementById('suburbFilter');
         
-        let suburbCounts = {};
-        markers.clearLayers(); // Xóa marker cũ nếu có
-
-        data.forEach(row => {
-            // Chỉ xử lý nếu có tọa độ
-            if (row.Latitude && row.Longitude) {
-                totalProperties++;
-
-                // Thống kê giá
-                if (row.Numeric_Price && !isNaN(row.Numeric_Price)) {
-                    totalPrice += row.Numeric_Price;
-                    validPriceCount++;
-                }
-
-                // Thống kê phòng ngủ
-                if (row.Beds && !isNaN(row.Beds)) {
-                    totalBeds += row.Beds;
-                    validBedsCount++;
-                }
-
-                // Đếm số lượng nhà theo Suburb
-                if (row.Suburb) {
-                    suburbCounts[row.Suburb] = (suburbCounts[row.Suburb] || 0) + 1;
-                }
-
-                // Thêm điểm lên bản đồ
-                const popupContent = `
-                    <b>${row.Full_Address || 'Không có địa chỉ'}</b><br>
-                    Loại: ${row.Property_Type || 'N/A'}<br>
-                    Giá: $${row.Numeric_Price ? row.Numeric_Price.toLocaleString() : 'N/A'}<br>
-                    Phòng ngủ: ${row.Beds || 'N/A'} | Tắm: ${row.Baths || 'N/A'}<br>
-                    <a href="${row.URL}" target="_blank">Xem chi tiết</a>
-                `;
-                L.circleMarker([row.Latitude, row.Longitude], {
-                    radius: 4,
-                    fillColor: "#ff7800",
-                    color: "#000",
-                    weight: 1,
-                    opacity: 1,
-                    fillOpacity: 0.6
-                }).bindPopup(popupContent).addTo(markers);
-            }
+        suburbs.forEach(suburb => {
+            const option = document.createElement('option');
+            option.value = suburb;
+            option.textContent = suburb;
+            select.appendChild(option);
         });
 
-        // Cập nhật các thẻ Thống kê (Stats)
-        document.getElementById('totalProperties').innerText = totalProperties.toLocaleString();
-        
-        const avgPrice = validPriceCount > 0 ? (totalPrice / validPriceCount) : 0;
-        document.getElementById('avgPrice').innerText = "$" + Math.round(avgPrice).toLocaleString();
-        
-        const avgBeds = validBedsCount > 0 ? (totalBeds / validBedsCount) : 0;
-        document.getElementById('avgBeds').innerText = avgBeds.toFixed(1);
+        select.addEventListener('change', function() {
+            const selectedSuburb = this.value;
+            let filteredData = globalData;
 
-        // Vẽ biểu đồ Bar Chart cho Top 10 Suburb
-        drawChart(suburbCounts);
+            if (selectedSuburb !== 'ALL') {
+                filteredData = globalData.filter(row => row.Suburb === selectedSuburb);
+                document.getElementById('filterResultText').innerText = `Viewing data for: ${selectedSuburb}`;
+                if(filteredData.length > 0) {
+                    map.setView([filteredData[0].Latitude, filteredData[0].Longitude], 13);
+                }
+            } else {
+                document.getElementById('filterResultText').innerText = '';
+                map.setView([-37.8136, 144.9631], 10);
+            }
+            processData(filteredData);
+        });
     }
 
-    // 4. Hàm vẽ biểu đồ với Chart.js
-    function drawChart(suburbCounts) {
-        // Sắp xếp và lấy top 10 Suburb
-        const sortedSuburbs = Object.entries(suburbCounts)
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10);
+    // 4. Process Data & Draw UI
+    function processData(data) {
+        let totalProps = 0, totalPrice = 0, validPriceCount = 0, totalBeds = 0, validBedsCount = 0;
+        let suburbCounts = {};
+        let typeCounts = {};
+        let priceRanges = { '< $750k': 0, '$750k - $1.5M': 0, '$1.5M - $3M': 0, '> $3M': 0 };
+        let bedsCounts = { '1 Bed': 0, '2 Beds': 0, '3 Beds': 0, '4 Beds': 0, '5+ Beds': 0 };
 
-        const labels = sortedSuburbs.map(item => item[0]);
-        const values = sortedSuburbs.map(item => item[1]);
+        markers.clearLayers(); 
 
+        data.forEach(row => {
+            totalProps++;
+            const price = row.Numeric_Price;
+            
+            // Stats
+            if (price && !isNaN(price)) {
+                totalPrice += price;
+                validPriceCount++;
+                if (price < 750000) priceRanges['< $750k']++;
+                else if (price < 1500000) priceRanges['$750k - $1.5M']++;
+                else if (price < 3000000) priceRanges['$1.5M - $3M']++;
+                else priceRanges['> $3M']++;
+            }
+
+            if (row.Beds && !isNaN(row.Beds)) {
+                totalBeds += row.Beds;
+                validBedsCount++;
+                if(row.Beds === 1) bedsCounts['1 Bed']++;
+                else if(row.Beds === 2) bedsCounts['2 Beds']++;
+                else if(row.Beds === 3) bedsCounts['3 Beds']++;
+                else if(row.Beds === 4) bedsCounts['4 Beds']++;
+                else bedsCounts['5+ Beds']++;
+            }
+
+            if (row.Suburb) suburbCounts[row.Suburb] = (suburbCounts[row.Suburb] || 0) + 1;
+            const type = row.Property_Type || 'Unknown';
+            typeCounts[type] = (typeCounts[type] || 0) + 1;
+
+            // Map Markers setup
+            const markerColor = getPriceColor(price);
+            const markerRadius = (price && price > 3000000) ? 6 : 4; 
+
+            // Beautiful Click Popup Content
+            const popupContent = `
+                <div style="font-family: 'Inter', sans-serif; min-width: 220px; color: #334155;">
+                    <h6 style="margin: 0 0 8px 0; color: #0f172a; font-weight: 700; font-size: 15px; line-height: 1.3;">${row.Full_Address || 'N/A'}</h6>
+                    <span style="background: ${markerColor}20; color: ${markerColor}; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; margin-bottom: 10px; border: 1px solid ${markerColor}40;">
+                        💰 ${price ? '$' + price.toLocaleString() : 'Price Withheld'}
+                    </span>
+                    <div style="font-size: 13px; line-height: 1.7; margin-bottom: 12px;">
+                        <b>🏠 Type:</b> ${row.Property_Type || 'N/A'}<br>
+                        <b>🛏️ Layout:</b> ${row.Beds || '-'} Bed | 🛁 ${row.Baths || '-'} Bath | 🚗 ${row.Car_Spaces || '-'}<br>
+                        ${row.Land_Size_sqm ? `<b>📐 Land:</b> ${row.Land_Size_sqm} sqm` : ''}
+                    </div>
+                    ${row.URL ? `<a href="${row.URL}" target="_blank" style="display: block; width: 100%; text-align: center; background: #3b82f6; color: white; padding: 8px 0; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px; transition: 0.2s;">View on Domain →</a>` : ''}
+                </div>
+            `;
+
+            const marker = L.circleMarker([row.Latitude, row.Longitude], {
+                radius: markerRadius, fillColor: markerColor, color: "#ffffff", weight: 1.5, opacity: 1, fillOpacity: 0.85
+            });
+
+            // Changed to bindPopup (CLICK to view) instead of bindTooltip (Hover)
+            marker.bindPopup(popupContent);
+            marker.addTo(markers);
+        });
+
+        // Update Text Stats
+        document.getElementById('totalProperties').innerText = totalProps.toLocaleString();
+        document.getElementById('avgPrice').innerText = "$" + Math.round(validPriceCount ? totalPrice/validPriceCount : 0).toLocaleString();
+        document.getElementById('avgBeds').innerText = (validBedsCount ? totalBeds/validBedsCount : 0).toFixed(1);
+        document.getElementById('totalSuburbs').innerText = Object.keys(suburbCounts).length.toLocaleString();
+
+        // Draw All Charts
+        drawSuburbChart(suburbCounts);
+        drawTypeChart(typeCounts);
+        drawPriceDistChart(priceRanges);
+        drawBedsChart(bedsCounts);
+    }
+
+    // 5. Beautiful Chart Drawing Functions
+    function drawSuburbChart(suburbCounts) {
+        const sorted = Object.entries(suburbCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
         const ctx = document.getElementById('suburbChart').getContext('2d');
-        
-        // Hủy biểu đồ cũ nếu upload file mới
-        if (suburbChartInstance) {
-            suburbChartInstance.destroy();
-        }
+        if (suburbChartInstance) suburbChartInstance.destroy();
 
         suburbChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Số lượng Bất động sản',
-                    data: values,
-                    backgroundColor: 'rgba(13, 110, 253, 0.6)',
-                    borderColor: 'rgba(13, 110, 253, 1)',
-                    borderWidth: 1
+                labels: sorted.map(i => i[0]),
+                datasets: [{ 
+                    data: sorted.map(i => i[1]), 
+                    backgroundColor: 'rgba(59, 130, 246, 0.8)', 
+                    borderColor: '#3b82f6',
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    barPercentage: 0.7
                 }]
             },
             options: {
-                responsive: true,
-                scales: {
-                    y: { beginAtZero: true }
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: { 
+                    x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45, font: { weight: 500 } } },
+                    y: { grid: { color: '#f1f5f9' }, border: { display: false } }
                 }
+            }
+        });
+    }
+
+    function drawTypeChart(typeCounts) {
+        const ctx = document.getElementById('typeChart').getContext('2d');
+        if (typeChartInstance) typeChartInstance.destroy();
+
+        typeChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: Object.keys(typeCounts),
+                datasets: [{
+                    data: Object.values(typeCounts),
+                    backgroundColor: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#64748b'],
+                    borderWidth: 2, borderColor: '#ffffff'
+                }]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false, cutout: '65%',
+                plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { weight: 500 } } } } 
+            }
+        });
+    }
+
+    function drawPriceDistChart(priceRanges) {
+        const ctx = document.getElementById('priceDistChart').getContext('2d');
+        if (priceDistChartInstance) priceDistChartInstance.destroy();
+
+        priceDistChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: Object.keys(priceRanges),
+                datasets: [{
+                    data: Object.values(priceRanges),
+                    backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#ef4444'],
+                    borderRadius: 6,
+                    barPercentage: 0.6
+                }]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false, 
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { weight: 500 } } },
+                    y: { grid: { color: '#f1f5f9' }, border: { display: false } }
+                }
+            }
+        });
+    }
+
+    function drawBedsChart(bedsCounts) {
+        const ctx = document.getElementById('bedsChart').getContext('2d');
+        if (bedsChartInstance) bedsChartInstance.destroy();
+
+        bedsChartInstance = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: Object.keys(bedsCounts),
+                datasets: [{
+                    data: Object.values(bedsCounts),
+                    backgroundColor: ['#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#334155'],
+                    borderWidth: 2, borderColor: '#ffffff'
+                }]
+            },
+            options: { 
+                responsive: true, maintainAspectRatio: false, 
+                plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { weight: 500 } } } } 
             }
         });
     }
