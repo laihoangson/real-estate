@@ -5,11 +5,12 @@ permissions:
 
 on:
   schedule:
-    - cron: "0 16 * * *"   # chạy mỗi ngày (UTC)
-  workflow_dispatch:       # cho phép chạy manual
+    - cron: "0 16 * * *"
+  workflow_dispatch:
 
 jobs:
   scrape:
+
     runs-on: ubuntu-latest
 
     steps:
@@ -22,16 +23,13 @@ jobs:
       with:
         python-version: "3.11"
 
-    - name: Install Chrome
-      uses: browser-actions/setup-chrome@v1
-
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
 
     - name: Run scraper
       run: |
-        python extract.py
+        python extract_async.py
 
     - name: Commit updated dataset
       run: |
