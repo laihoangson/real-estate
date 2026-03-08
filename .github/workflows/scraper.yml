@@ -1,0 +1,42 @@
+name: Melbourne Property Scraper
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: "0 16 * * *"   # chạy mỗi ngày (UTC)
+  workflow_dispatch:       # cho phép chạy manual
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install Chrome
+      uses: browser-actions/setup-chrome@v1
+
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+
+    - name: Run scraper
+      run: |
+        python extract.py
+
+    - name: Commit updated dataset
+      run: |
+        git config --global user.name "laihoangson"
+        git config --global user.email "lson21757@gmail.com"
+        git add melbourne_full_hybrid_data.csv
+        git commit -m "Auto update property data" || echo "No changes"
+        git push
