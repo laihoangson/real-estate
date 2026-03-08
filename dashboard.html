@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Melbourne Property Dashboard</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body { background-color: #f4f6f9; padding-bottom: 30px; }
+        #map { height: 500px; width: 100%; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .stat-card { text-align: center; padding: 20px; border-radius: 8px; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .stat-value { font-size: 28px; font-weight: bold; color: #0d6efd; }
+        .stat-title { color: #6c757d; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+        .chart-container { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="container mt-4">
+    <h2 class="text-center mb-4">🏠 Melbourne Property Dashboard</h2>
+    
+    <div class="row mb-4 justify-content-center">
+        <div class="col-md-6 text-center">
+            <label for="csvFileInput" class="form-label fw-bold">Chọn file melbourne_full_hybrid_data.csv để tải dữ liệu:</label>
+            <input class="form-control" type="file" id="csvFileInput" accept=".csv">
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-title">Tổng số Bất động sản</div>
+                <div class="stat-value" id="totalProperties">0</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-title">Giá trung bình (AUD)</div>
+                <div class="stat-value" id="avgPrice">$0</div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-title">Số phòng ngủ TB</div>
+                <div class="stat-value" id="avgBeds">0</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mt-2">
+        <div class="col-md-7">
+            <h5 class="mb-3">🗺️ Bản đồ phân bố</h5>
+            <div id="map"></div>
+        </div>
+        
+        <div class="col-md-5">
+            <h5 class="mb-3">📊 Top 10 Khu vực (Suburb) nhiều nhà nhất</h5>
+            <div class="chart-container">
+                <canvas id="suburbChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // 1. Khởi tạo bản đồ Leaflet (Focus vào Melbourne)
+    const map = L.map('map').setView([-37.8136, 144.9631], 10);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    let markers = L.layerGroup().addTo(map);
+    let suburbChartInstance = null;
+
+    // 2. Lắng nghe sự kiện khi người dùng chọn file CSV
+    document.getElementById('csvFileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            dynamicTyping: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                const data = results.data;
+                processData(data);
+            }
+        });
+    });
+
+    // 3. Hàm xử lý và vẽ dữ liệu
+    function processData(data) {
+        let totalProperties = 0;
+        let totalPrice = 0;
+        let validPriceCount = 0;
+        let totalBeds = 0;
+        let validBedsCount = 0;
+        
+        let suburbCounts = {};
+        markers.clearLayers(); // Xóa marker cũ nếu có
+
+        data.forEach(row => {
+            // Chỉ xử lý nếu có tọa độ
+            if (row.Latitude && row.Longitude) {
+                totalProperties++;
+
+                // Thống kê giá
+                if (row.Numeric_Price && !isNaN(row.Numeric_Price)) {
+                    totalPrice += row.Numeric_Price;
+                    validPriceCount++;
+                }
+
+                // Thống kê phòng ngủ
+                if (row.Beds && !isNaN(row.Beds)) {
+                    totalBeds += row.Beds;
+                    validBedsCount++;
+                }
+
+                // Đếm số lượng nhà theo Suburb
+                if (row.Suburb) {
+                    suburbCounts[row.Suburb] = (suburbCounts[row.Suburb] || 0) + 1;
+                }
+
+                // Thêm điểm lên bản đồ
+                const popupContent = `
+                    <b>${row.Full_Address || 'Không có địa chỉ'}</b><br>
+                    Loại: ${row.Property_Type || 'N/A'}<br>
+                    Giá: $${row.Numeric_Price ? row.Numeric_Price.toLocaleString() : 'N/A'}<br>
+                    Phòng ngủ: ${row.Beds || 'N/A'} | Tắm: ${row.Baths || 'N/A'}<br>
+                    <a href="${row.URL}" target="_blank">Xem chi tiết</a>
+                `;
+                L.circleMarker([row.Latitude, row.Longitude], {
+                    radius: 4,
+                    fillColor: "#ff7800",
+                    color: "#000",
+                    weight: 1,
+                    opacity: 1,
+                    fillOpacity: 0.6
+                }).bindPopup(popupContent).addTo(markers);
+            }
+        });
+
+        // Cập nhật các thẻ Thống kê (Stats)
+        document.getElementById('totalProperties').innerText = totalProperties.toLocaleString();
+        
+        const avgPrice = validPriceCount > 0 ? (totalPrice / validPriceCount) : 0;
+        document.getElementById('avgPrice').innerText = "$" + Math.round(avgPrice).toLocaleString();
+        
+        const avgBeds = validBedsCount > 0 ? (totalBeds / validBedsCount) : 0;
+        document.getElementById('avgBeds').innerText = avgBeds.toFixed(1);
+
+        // Vẽ biểu đồ Bar Chart cho Top 10 Suburb
+        drawChart(suburbCounts);
+    }
+
+    // 4. Hàm vẽ biểu đồ với Chart.js
+    function drawChart(suburbCounts) {
+        // Sắp xếp và lấy top 10 Suburb
+        const sortedSuburbs = Object.entries(suburbCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
+
+        const labels = sortedSuburbs.map(item => item[0]);
+        const values = sortedSuburbs.map(item => item[1]);
+
+        const ctx = document.getElementById('suburbChart').getContext('2d');
+        
+        // Hủy biểu đồ cũ nếu upload file mới
+        if (suburbChartInstance) {
+            suburbChartInstance.destroy();
+        }
+
+        suburbChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Số lượng Bất động sản',
+                    data: values,
+                    backgroundColor: 'rgba(13, 110, 253, 0.6)',
+                    borderColor: 'rgba(13, 110, 253, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
