@@ -6,13 +6,13 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-print("🚀 STARTING OPTIMIZED HYBRID SCRAPER (12x12 GRID) 🚀")
+print("🚀 STARTING OPTIMIZED HYBRID SCRAPER (15x15 GRID) 🚀")
 
 # ==========================================
 # 1. BROWSER & SCRIPT CONFIGURATION
 # ==========================================
 FILE_NAME = 'melbourne_full_hybrid_data.csv'
-GRID_SIZE = 12 
+GRID_SIZE = 15 
 
 chrome_options = Options()
 # Eager loading: Do not wait for images or CSS to load (Speed optimization)
