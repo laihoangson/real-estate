@@ -16,23 +16,23 @@ FILE_NAME = 'melbourne_full_hybrid_data.csv'
 GRID_SIZE = 15 
 
 chrome_options = Options()
+# Eager loading: Do not wait for images or CSS to load (Speed optimization)
 chrome_options.page_load_strategy = 'eager' 
 prefs = {"profile.managed_default_content_settings.images": 2}
 chrome_options.add_experimental_option("prefs", prefs)
 
-# --- CÁC CỜ BẮT BUỘC CHO GITHUB ACTIONS (UBUNTU LINUX) ---
-chrome_options.add_argument("--headless") # Dùng cờ headless truyền thống thay vì =new để ổn định trên Linux
-chrome_options.add_argument("--no-sandbox") # Bắt buộc trên Linux server để vượt quyền root
-chrome_options.add_argument("--disable-dev-shm-usage") # Khắc phục lỗi thiếu RAM của docker/máy ảo
-chrome_options.add_argument("--disable-gpu") # Tắt tăng tốc phần cứng (máy ảo không có GPU)
-chrome_options.add_argument("--disable-software-rasterizer")
+# Mandatory settings for GitHub Actions (Ubuntu Server Environment)
+chrome_options.add_argument("--headless=new") 
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--window-size=1920,1080")
 chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+chrome_options.add_argument("--remote-debugging-port=9222")
 
-# Fake User-Agent để tránh bị block
+# CRITICAL: Spoof the User-Agent to avoid being flagged as a headless bot
 chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-# Khởi tạo driver (Selenium v4+ sẽ tự động tải ChromeDriver tương thích)
 driver = webdriver.Chrome(options=chrome_options)
 
 # ==========================================
@@ -80,7 +80,7 @@ try:
             
             grid_url = f"https://www.domain.com.au/sale/?excludeunderoffer=1&startloc={t_lat}%2C{l_lng}&endloc={b_lat}%2C{r_lng}"
             
-            print(f"📍 Cell [{cell_idx}/{GRID_SIZE*GRID_SIZE}] | Scanning area coordinates...")
+            print(f"📍 Cell [{cell_idx}/225] | Scanning area coordinates...")
             driver.get(f"{grid_url}&page=1")
             time.sleep(2)
             
