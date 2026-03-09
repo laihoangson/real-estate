@@ -5,3 +5,5 @@ lxml
 aiohttp
 webdriver_manager
 undetected-chromedriver
+cloudscraper
+curl_cffi

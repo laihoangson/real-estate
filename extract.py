@@ -5,36 +5,15 @@ import random
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
-import undetected_chromedriver as uc
-# -----------------------------------
+from curl_cffi import requests 
 
-print("🚀 STARTING OPTIMIZED HYBRID SCRAPER (UNDETECTED STEALTH MODE) 🚀")
+print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE) 🚀")
 
 FILE_NAME = 'melbourne_full_hybrid_data.csv'
-GRID_SIZE = 11
+GRID_SIZE = 2  
 
 # ==========================================
-# 1. BROWSER & SCRIPT CONFIGURATION
-# ==========================================
-options = uc.ChromeOptions()
-options.page_load_strategy = 'eager'
-prefs = {"profile.managed_default_content_settings.images": 2}
-options.add_experimental_option("prefs", prefs)
-
-# Linux/GitHub Actions
-options.add_argument('--headless') 
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--disable-gpu')
-options.add_argument('--window-size=1920,1080')
-options.add_argument("--disable-software-rasterizer")
-options.add_argument('--disable-popup-blocking')
-options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36")
-
-driver = uc.Chrome(options=options, version_main=145) 
-
-# ==========================================
-# 2. HELPER FUNCTIONS
+# 1. HELPER FUNCTIONS
 # ==========================================
 def extract_numeric_price(price_str):
     if not price_str or "contact" in price_str.lower() or "auction" in price_str.lower():
@@ -47,11 +26,11 @@ def extract_numeric_price(price_str):
         return numbers[0]
     return None
 
-def human_delay(min_sec=1.5, max_sec=3.5):
+def human_delay(min_sec=1.0, max_sec=2.5):
     time.sleep(random.uniform(min_sec, max_sec))
 
 # ==========================================
-# 3. COORDINATES (MELBOURNE METRO BOUNDING BOX)
+# 2. COORDINATES & SESSION
 # ==========================================
 LAT_NORTH = -37.4000
 LAT_SOUTH = -38.2000
@@ -61,59 +40,83 @@ LNG_EAST = 145.4000
 lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
 lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
 
+# Khởi tạo Session đóng giả Chrome phiên bản 120
+session = requests.Session(impersonate="chrome120")
+
+# ==========================================
+# 3. DATA EXTRACTION PROCESS
+# ==========================================
 daily_scraped_data = []
 seen_ids = set()
 
-# ==========================================
-# 4. DATA EXTRACTION PROCESS
-# ==========================================
+# Load ID cũ nếu có để tránh trùng lặp
+if os.path.exists(FILE_NAME):
+    df_existing = pd.read_csv(FILE_NAME)
+    if 'Property_ID' in df_existing.columns:
+        seen_ids = set(df_existing['Property_ID'].astype(str))
+
+block_counter = 0
+
 try:
     cell_idx = 0
     for i in range(GRID_SIZE):
         for j in range(GRID_SIZE):
             cell_idx += 1
             
-            t_lat = LAT_NORTH - (i * lat_step)
-            b_lat = LAT_NORTH - ((i + 1) * lat_step)
-            l_lng = LNG_WEST + (j * lng_step)
-            r_lng = LNG_WEST + ((j + 1) * lng_step)
+            t_lat = round(LAT_NORTH - (i * lat_step), 4)
+            b_lat = round(LAT_NORTH - ((i + 1) * lat_step), 4)
+            l_lng = round(LNG_WEST + (j * lng_step), 4)
+            r_lng = round(LNG_WEST + ((j + 1) * lng_step), 4)
             
             grid_url = f"https://www.domain.com.au/sale/?excludeunderoffer=1&startloc={t_lat}%2C{l_lng}&endloc={b_lat}%2C{r_lng}"
             
-            print(f"\n📍 Cell [{cell_idx}/{GRID_SIZE*GRID_SIZE}] | Coordinates: {t_lat:.3f},{l_lng:.3f} to {b_lat:.3f},{r_lng:.3f}")
-            driver.get(f"{grid_url}&page=1")
+            print(f"\n📍 Cell [{cell_idx}/{GRID_SIZE*GRID_SIZE}] | Requesting...")
             
-            human_delay(2.5, 4.5) 
-            
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            try:
+                # Gửi request siêu tàng hình
+                response = session.get(f"{grid_url}&page=1", timeout=15)
+            except Exception as e:
+                print(f"   -> Lỗi kết nối: {e}")
+                continue
+
+            soup = BeautifulSoup(response.text, 'html.parser')
             script_tag = soup.find('script', id='__NEXT_DATA__')
             
             if not script_tag: 
-                if "We couldn't find anything" in driver.page_source:
-                    print("   -> (Empty) No properties in this grid cell.")
+                if "We couldn't find anything" in response.text:
+                    print("   -> (Empty) Không có nhà ở ô này.")
+                    block_counter = 0
                 else:
-                    print("   -> ⚠️ WARNING: Blocked by Anti-Bot. Taking a long break...")
-                    time.sleep(15) 
+                    block_counter += 1
+                    print(f"   -> ⚠️ Bị Cloudflare chặn (Strike {block_counter}/3).")
+                    if block_counter >= 3:
+                        print("🚨 DỪNG LẠI! Github IP đã bị khoanh vùng. Lưu data và thoát...")
+                        break
+                    time.sleep(10)
                 continue
+            
+            block_counter = 0 # Reset
             
             data = json.loads(script_tag.string)
             props = data['props']['pageProps']['componentProps']
             total_pages = props.get('totalPages', 1)
             
-            if total_pages >= 50:
-                print(f"   ⚠️ DENSITY ALERT: Hits 50-page limit.")
-
+            # Quét từng trang của ô
             for page in range(1, total_pages + 1):
                 if page > 1:
-                    driver.get(f"{grid_url}&page={page}")
-                    human_delay(1.0, 2.5)
-                    soup = BeautifulSoup(driver.page_source, 'html.parser')
-                    script_tag = soup.find('script', id='__NEXT_DATA__')
+                    human_delay(1.0, 2.0)
+                    try:
+                        response = session.get(f"{grid_url}&page={page}", timeout=15)
+                        soup = BeautifulSoup(response.text, 'html.parser')
+                        script_tag = soup.find('script', id='__NEXT_DATA__')
+                    except:
+                        continue
                 
                 if script_tag:
                     listings = json.loads(script_tag.string)['props']['pageProps']['componentProps'].get('listingsMap', {})
                     for pid, item in listings.items():
-                        if pid not in seen_ids:
+                        pid_str = str(pid)
+                        if pid_str not in seen_ids:
                             m = item.get('listingModel', {})
                             a = m.get('address', {})
                             f = m.get('features', {})
@@ -128,7 +131,7 @@ try:
 
                             if full_address:
                                 daily_scraped_data.append({
-                                    'Property_ID': pid,
+                                    'Property_ID': pid_str,
                                     'Full_Address': full_address,
                                     'Suburb': suburb,
                                     'Postcode': postcode,
@@ -144,18 +147,21 @@ try:
                                     'URL': f"https://www.domain.com.au{url_path}" if url_path else "N/A",
                                     'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d')
                                 })
-                                seen_ids.add(pid)
+                                seen_ids.add(pid_str)
+
+        if block_counter >= 3:
+            break
 
 finally:
-    driver.quit()
+    pass
 
 # ==========================================
-# 5. UPSERT LOGIC & DATA LOAD
+# 4. UPSERT LOGIC
 # ==========================================
 print("\n[3] WRITING TO DATABASE...")
 
 if not daily_scraped_data:
-    print("❌ Failure: No data collected today.")
+    print("❌ Hôm nay không cào thêm được căn nào (hoặc đã quét hết).")
 else:
     df_new = pd.DataFrame(daily_scraped_data)
     if os.path.exists(FILE_NAME):
@@ -163,7 +169,7 @@ else:
         df_combined = pd.concat([df_old, df_new], ignore_index=True)
         df_final = df_combined.drop_duplicates(subset=['Property_ID'], keep='last')
         df_final.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
-        print(f"✅ Upsert successful. Total properties in warehouse: {len(df_final)}")
+        print(f"✅ Đã gộp thành công! Tổng số nhà trong kho: {len(df_final)}")
     else:
         df_new.to_csv(FILE_NAME, index=False, encoding='utf-8-sig')
-        print(f"✅ Initial CSV created. Total properties: {len(df_new)}")
+        print(f"✅ Đã tạo file CSV mới. Tổng số nhà: {len(df_new)}")
