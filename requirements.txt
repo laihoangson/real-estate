@@ -3,3 +3,4 @@ beautifulsoup4
 selenium
 lxml
 aiohttp
+webdriver_manager
