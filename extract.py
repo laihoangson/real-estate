@@ -2,6 +2,7 @@ import os
 import json
 import time
 import pandas as pd
+import re
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -21,7 +22,7 @@ prefs = {"profile.managed_default_content_settings.images": 2}
 chrome_options.add_experimental_option("prefs", prefs)
 
 # Mandatory settings for GitHub Actions (Ubuntu Server Environment)
-chrome_options.add_argument("--headless=new") 
+# chrome_options.add_argument("--headless=new") # Uncomment for headless execution
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
@@ -35,7 +36,21 @@ chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64
 driver = webdriver.Chrome(options=chrome_options)
 
 # ==========================================
-# 2. COORDINATES (MELBOURNE METRO BOUNDING BOX)
+# 2. HELPER FUNCTIONS
+# ==========================================
+def extract_numeric_price(price_str):
+    if not price_str or "contact" in price_str.lower() or "auction" in price_str.lower():
+        return None
+    numbers = re.findall(r'\d+', str(price_str).replace(',', '').replace('.', ''))
+    numbers = [float(n) for n in numbers if len(n) >= 4]
+    if len(numbers) >= 2:
+        return (numbers[0] + numbers[1]) / 2 
+    elif len(numbers) == 1:
+        return numbers[0]
+    return None
+
+# ==========================================
+# 3. COORDINATES (MELBOURNE METRO BOUNDING BOX)
 # ==========================================
 LAT_NORTH = -37.4000
 LAT_SOUTH = -38.2000
@@ -49,7 +64,7 @@ daily_scraped_data = []
 seen_ids = set()
 
 # ==========================================
-# 3. DATA EXTRACTION PROCESS
+# 4. DATA EXTRACTION PROCESS
 # ==========================================
 try:
     cell_idx = 0
@@ -65,7 +80,7 @@ try:
             
             grid_url = f"https://www.domain.com.au/sale/?excludeunderoffer=1&startloc={t_lat}%2C{l_lng}&endloc={b_lat}%2C{r_lng}"
             
-            print(f"📍 Cell [{cell_idx}/144] | Scanning area coordinates...")
+            print(f"📍 Cell [{cell_idx}/{GRID_SIZE*GRID_SIZE}] | Scanning area coordinates...")
             driver.get(f"{grid_url}&page=1")
             time.sleep(2)
             
@@ -100,24 +115,42 @@ try:
                             a = m.get('address', {})
                             f = m.get('features', {})
                             
-                            daily_scraped_data.append({
-                                'Property_ID': pid,
-                                'Address': f"{a.get('street')}, {a.get('suburb')} VIC",
-                                'Price': m.get('price'),
-                                'Beds': f.get('beds'),
-                                'Baths': f.get('baths'),
-                                'Lat': a.get('lat'),
-                                'Lng': a.get('lng'),
-                                'URL': f"https://www.domain.com.au{m.get('url')}"
-                            })
-                            seen_ids.add(pid)
+                            # Safely extract values
+                            street = a.get('street', 'N/A')
+                            suburb = str(a.get('suburb', 'Map Area')).upper()
+                            postcode = a.get('postcode', '')
+                            raw_price = m.get('price', 'N/A')
+                            url_path = m.get('url', '')
+                            
+                            # Construct full address
+                            full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
+
+                            if full_address:
+                                daily_scraped_data.append({
+                                    'Property_ID': pid,
+                                    'Full_Address': full_address,
+                                    'Suburb': suburb,
+                                    'Postcode': postcode,
+                                    'Property_Type': f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
+                                    'Beds': f.get('beds', 0),
+                                    'Baths': f.get('baths', 0),
+                                    'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
+                                    'Land_Size_sqm': f.get('landSize', 0),
+                                    'Raw_Price': raw_price,
+                                    'Numeric_Price': extract_numeric_price(raw_price),
+                                    'Latitude': a.get('lat', m.get('geolocation', {}).get('latitude')),
+                                    'Longitude': a.get('lng', m.get('geolocation', {}).get('longitude')),
+                                    'URL': f"https://www.domain.com.au{url_path}" if url_path else "N/A",
+                                    'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d')
+                                })
+                                seen_ids.add(pid)
 
 finally:
     # Ensure the browser session is properly closed to free up server memory
     driver.quit()
 
 # ==========================================
-# 4. UPSERT LOGIC & DATA LOAD
+# 5. UPSERT LOGIC & DATA LOAD
 # ==========================================
 print("\n[3] WRITING TO DATABASE...")
 
@@ -129,7 +162,11 @@ else:
     if os.path.exists(FILE_NAME):
         # Merge new data with historical data
         df_old = pd.read_csv(FILE_NAME)
-        df_combined = pd.concat([df_old, df_new])
+        
+        # Ensure columns match before concatenating to avoid mixed schemas
+        # If old file has outdated columns, it's safer to overwrite it initially or run a transform script first.
+        # Assuming the old file has been cleaned by a transform script:
+        df_combined = pd.concat([df_old, df_new], ignore_index=True)
         
         # Upsert: Remove duplicate IDs, keeping the most recent (last) entry to capture price updates
         df_final = df_combined.drop_duplicates(subset=['Property_ID'], keep='last')
