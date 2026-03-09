@@ -30,8 +30,7 @@ options.add_argument('--window-size=1920,1080')
 options.add_argument("--disable-software-rasterizer")
 options.add_argument('--disable-popup-blocking')
 
-# Khởi tạo siêu trình duyệt (Nó sẽ tự tải ChromeDriver tương thích)
-driver = uc.Chrome(options=options, version_main=120) 
+driver = uc.Chrome(options=options) 
 
 # ==========================================
 # 2. HELPER FUNCTIONS
