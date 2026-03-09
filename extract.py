@@ -10,7 +10,7 @@ from curl_cffi import requests
 print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE) 🚀")
 
 FILE_NAME = 'melbourne_full_hybrid_data.csv'
-GRID_SIZE = 2  
+GRID_SIZE = 12  
 
 # ==========================================
 # 1. HELPER FUNCTIONS
