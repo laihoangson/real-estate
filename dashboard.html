@@ -7,98 +7,105 @@
     
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
+    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+    
     <style>
         body { 
-            background-color: #f4f7fa; 
+            background-color: #f8fafc; /* Lighter, cleaner background */
             font-family: 'Inter', sans-serif; 
             color: #334155;
             padding-bottom: 20px;
         }
         
-        /* Modern Header with Gradient */
+        /* Modern Header */
         .dashboard-header { 
-            background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-            padding: 30px 0; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1); 
+            background: linear-gradient(135deg, #0f172a 0%, #3b82f6 100%);
+            padding: 25px 0; 
+            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15); 
             margin-bottom: 30px; 
             color: white;
-            border-bottom-left-radius: 20px;
-            border-bottom-right-radius: 20px;
+            border-bottom-left-radius: 24px;
+            border-bottom-right-radius: 24px;
         }
 
         /* Upgraded Cards */
         .stat-card { 
             text-align: center; 
             padding: 24px 15px; 
-            border-radius: 16px; 
+            border-radius: 20px; 
             background: #fff; 
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.025);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
             margin-bottom: 24px; 
-            transition: all 0.3s ease;
-            border: 1px solid rgba(255,255,255,0.5);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border: 1px solid #f1f5f9;
         }
-        .stat-card:hover { transform: translateY(-5px); box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); }
-        .stat-value { font-size: 32px; font-weight: 800; color: #0f172a; margin-top: 8px; letter-spacing: -0.5px; }
-        .stat-title { color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+        .stat-card:hover { 
+            transform: translateY(-4px); 
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); 
+        }
+        .stat-value { font-size: 34px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -1px; }
+        .stat-title { color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
         
         /* Containers */
         .chart-container { 
             background: #fff; 
             padding: 24px; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+            border-radius: 20px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
             height: 380px; 
             position: relative; 
             margin-bottom: 24px; 
+            border: 1px solid #f1f5f9;
         }
         .main-chart-container { height: 550px; }
         #map { 
             height: 550px; 
             width: 100%; 
-            border-radius: 16px; 
-            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); 
+            border-radius: 20px; 
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
             z-index: 1;
-            border: 2px solid #fff;
+            border: 4px solid #fff;
         }
 
         /* Filter Section */
         .filter-section { 
             background: #fff; 
-            padding: 16px 24px; 
-            border-radius: 16px; 
+            padding: 20px 24px; 
+            border-radius: 20px; 
             box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
             margin-bottom: 24px; 
+            border: 1px solid #f1f5f9;
         }
-        .form-select { border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 500; }
-        .form-select:focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.25); }
-
+        
         /* Typography */
-        h5 { font-weight: 700; color: #1e293b; letter-spacing: -0.5px; font-size: 1.1rem; }
+        h5 { font-weight: 700; color: #1e293b; letter-spacing: -0.3px; font-size: 1.15rem; }
 
-        /* Custom Map Popup & Legend */
-        .info.legend { background: rgba(255,255,255,0.9); padding: 12px 15px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); line-height: 24px; color: #334155; font-size: 13px; font-weight: 600; backdrop-filter: blur(4px); }
-        .info.legend i { width: 14px; height: 14px; float: left; margin-right: 10px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.1); margin-top: 5px; }
-        
-        /* Customizing Leaflet Popup */
-        .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); padding: 5px; }
-        .leaflet-popup-content { margin: 10px 12px; line-height: 1.5; }
-        
+        /* Map UI */
+        .info.legend { background: rgba(255,255,255,0.95); padding: 15px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); line-height: 24px; color: #334155; font-size: 13px; font-weight: 600; backdrop-filter: blur(8px); }
+        .info.legend i { width: 14px; height: 14px; float: left; margin-right: 10px; border-radius: 4px; margin-top: 5px; }
+        .leaflet-popup-content-wrapper { border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15); padding: 5px; }
+        .leaflet-popup-content { margin: 12px 14px; line-height: 1.6; }
+
         /* Note box */
         .footer-note {
-            background: #e0f2fe;
-            border-left: 5px solid #0ea5e9;
-            color: #0369a1;
+            background: #f0fdf4;
+            border-left: 5px solid #22c55e;
+            color: #166534;
             padding: 16px 20px;
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 12px;
+            font-size: 14.5px;
             font-weight: 500;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
         }
+        
+        /* Tom Select Overrides for custom look */
+        .ts-control { border-radius: 10px; padding: 10px 15px; border: 1px solid #cbd5e1; }
+        .ts-control.focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.15); }
     </style>
 </head>
 <body>
@@ -106,9 +113,9 @@
 <div class="dashboard-header">
     <div class="container">
         <h2 class="m-0 text-center fw-bold d-flex align-items-center justify-content-center">
-            <span style="font-size: 1.2em; margin-right: 10px;">🏘️</span> Melbourne Market Insight
+            <span style="font-size: 1.2em; margin-right: 12px;">🏘️</span> Melbourne Market Insight
         </h2>
-        <p class="text-center m-0 mt-2" style="color: #e2e8f0; font-weight: 400; font-size: 1.1rem;">Interactive Real Estate Analytics Dashboard</p>
+        <p class="text-center m-0 mt-2 opacity-75" style="font-weight: 400; font-size: 1.05rem;">Interactive Real Estate Analytics Dashboard</p>
     </div>
 </div>
 
@@ -117,13 +124,15 @@
     <div class="row">
         <div class="col-12">
             <div class="filter-section d-flex flex-wrap align-items-center">
-                <label for="suburbFilter" class="fw-bold me-3 mb-0" style="color: #334155; min-width: 140px; font-size: 15px;">
-                    <i class="me-1">🔍</i> Filter by Suburb:
+                <label for="suburbFilter" class="fw-bold me-3 mb-0" style="color: #334155; font-size: 15px;">
+                    <i class="me-1">🔍</i> Search & Filter Suburb:
                 </label>
-                <select id="suburbFilter" class="form-select w-auto min-w-200" style="min-width: 250px;">
-                    <option value="ALL">All Suburbs (Entire Melbourne)</option>
+                <div style="min-width: 300px; flex-grow: 1; max-width: 500px;">
+                    <select id="suburbFilter" autocomplete="off" placeholder="Type a suburb name...">
+                        <option value="ALL">All Suburbs (Entire Melbourne)</option>
                     </select>
-                <span class="ms-3 text-muted fw-semibold" id="filterResultText" style="font-size: 14px; color: #64748b !important;"></span>
+                </div>
+                <span class="ms-3 text-muted fw-semibold mt-2 mt-md-0" id="filterResultText" style="font-size: 14px;"></span>
             </div>
         </div>
     </div>
@@ -157,7 +166,7 @@
 
     <div class="row mt-2">
         <div class="col-xl-8 col-lg-7 mb-4">
-            <h5 class="mb-3">📍 Property Valuation Map <span style="font-size: 13px; font-weight: 400; color: #64748b;">(Click on points for details)</span></h5>
+            <h5 class="mb-3">📍 Property Valuation Map <span style="font-size: 13px; font-weight: 500; color: #94a3b8;">(Click points for details)</span></h5>
             <div id="map"></div>
         </div>
         
@@ -185,20 +194,20 @@
         </div>
 
         <div class="col-lg-4 col-md-12">
-            <h5 class="mb-3 text-center">🛏️ Bedrooms Distribution</h5>
+            <h5 class="mb-3 text-center">🛏️ Bedrooms Breakdown</h5>
             <div class="chart-container">
                 <canvas id="bedsChart"></canvas>
             </div>
         </div>
     </div>
 
-    <div class="row mt-3 mb-4">
+    <div class="row mt-3 mb-5">
         <div class="col-12">
             <div class="footer-note d-flex align-items-center">
-                <span style="font-size: 20px; margin-right: 15px;">💡</span>
+                <span style="font-size: 22px; margin-right: 15px;">💡</span>
                 <div>
-                    <strong>Note for users:</strong> This dashboard directly processes the local <code>melbourne_full_hybrid_data.csv</code> file within your browser. 
-                    No data is uploaded to external servers. Please <b>click on any colored point</b> on the map to view detailed information about the property, including direct links to the original listing source.
+                    <strong>Data Processing Note:</strong> This dashboard directly processes the local <code>melbourne_full_hybrid_data.csv</code> file within your browser. 
+                    No data is uploaded to external servers. <b>Click on any colored point</b> on the map to view detailed information about the property.
                 </div>
             </div>
         </div>
@@ -208,17 +217,26 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
 
 <script>
-    // Global Config
+    // Global Config for Beautiful Charts
     Chart.defaults.font.family = "'Inter', sans-serif";
     Chart.defaults.color = '#64748b';
+    Chart.defaults.scale.grid.color = 'rgba(241, 245, 249, 0.8)'; // Lighter dashed grid
+    
+    // Custom Tooltip Styling globally
+    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.9)';
+    Chart.defaults.plugins.tooltip.padding = 12;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+    Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
+    Chart.defaults.plugins.tooltip.bodyFont = { size: 13 };
+
     let globalData = [];
+    let tomSelectInstance = null;
 
     // 1. Initialize Map
     const map = L.map('map').setView([-37.8136, 144.9631], 10);
-    
-    // Using a cleaner CartoDB light basemap
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         attribution: '&copy; OSM &copy; CARTO',
         subdomains: 'abcd',
@@ -227,18 +245,16 @@
 
     let markers = L.layerGroup().addTo(map);
 
-    // Chart instances
     let suburbChartInstance = null;
     let typeChartInstance = null;
     let priceDistChartInstance = null;
     let bedsChartInstance = null;
 
-    // Beautiful Color Palette for Prices
     function getPriceColor(price) {
-        if (!price || isNaN(price)) return '#94a3b8'; // Slate 400
+        if (!price || isNaN(price)) return '#cbd5e1'; // Slate 300
         if (price < 750000) return '#10b981';  // Emerald 500
-        if (price < 1500000) return '#f59e0b'; // Amber 500
-        if (price < 3000000) return '#f97316'; // Orange 500
+        if (price < 1500000) return '#3b82f6'; // Blue 500 (Swapped amber for modern blue)
+        if (price < 3000000) return '#f59e0b'; // Amber 500
         return '#ef4444';                      // Red 500
     }
 
@@ -248,13 +264,13 @@
         const div = L.DomUtil.create('div', 'info legend');
         const grades = [0, 750000, 1500000, 3000000];
         const labels = ['Under $750k', '$750k - $1.5M', '$1.5M - $3M', 'Over $3M'];
-        const colors = ['#10b981', '#f59e0b', '#f97316', '#ef4444'];
+        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
 
-        div.innerHTML = '<div style="margin-bottom:8px; font-size:14px; color:#1e293b;"><strong>Price Range</strong></div>';
+        div.innerHTML = '<div style="margin-bottom:10px; font-size:14px; color:#0f172a;"><strong>Price Range</strong></div>';
         for (let i = 0; i < grades.length; i++) {
             div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + labels[i] + '<br>';
         }
-        div.innerHTML += '<i style="background:#94a3b8"></i> Price Withheld';
+        div.innerHTML += '<i style="background:#cbd5e1"></i> Price Withheld';
         return div;
     };
     legend.addTo(map);
@@ -276,7 +292,7 @@
         });
     };
 
-    // 3. Setup Dropdown Filter
+    // 3. Setup Dropdown Filter with Tom Select
     function setupFilter(data) {
         const suburbs = [...new Set(data.map(item => item.Suburb).filter(Boolean))].sort();
         const select = document.getElementById('suburbFilter');
@@ -288,15 +304,22 @@
             select.appendChild(option);
         });
 
+        // Initialize Tom Select for Autocomplete
+        tomSelectInstance = new TomSelect("#suburbFilter", {
+            create: false,
+            sortField: { field: "text", direction: "asc" },
+            maxOptions: 50
+        });
+
         select.addEventListener('change', function() {
             const selectedSuburb = this.value;
             let filteredData = globalData;
 
-            if (selectedSuburb !== 'ALL') {
+            if (selectedSuburb !== 'ALL' && selectedSuburb !== '') {
                 filteredData = globalData.filter(row => row.Suburb === selectedSuburb);
-                document.getElementById('filterResultText').innerText = `Viewing data for: ${selectedSuburb}`;
+                document.getElementById('filterResultText').innerHTML = `<span style="color: #3b82f6;">Viewing:</span> ${selectedSuburb}`;
                 if(filteredData.length > 0) {
-                    map.setView([filteredData[0].Latitude, filteredData[0].Longitude], 13);
+                    map.setView([filteredData[0].Latitude, filteredData[0].Longitude], 14);
                 }
             } else {
                 document.getElementById('filterResultText').innerText = '';
@@ -320,7 +343,6 @@
             totalProps++;
             const price = row.Numeric_Price;
             
-            // Stats
             if (price && !isNaN(price)) {
                 totalPrice += price;
                 validPriceCount++;
@@ -344,74 +366,76 @@
             const type = row.Property_Type || 'Unknown';
             typeCounts[type] = (typeCounts[type] || 0) + 1;
 
-            // Map Markers setup
             const markerColor = getPriceColor(price);
-            const markerRadius = (price && price > 3000000) ? 6 : 4; 
+            const markerRadius = (price && price > 3000000) ? 6 : 5; 
 
-            // Beautiful Click Popup Content
             const popupContent = `
                 <div style="font-family: 'Inter', sans-serif; min-width: 220px; color: #334155;">
-                    <h6 style="margin: 0 0 8px 0; color: #0f172a; font-weight: 700; font-size: 15px; line-height: 1.3;">${row.Full_Address || 'N/A'}</h6>
-                    <span style="background: ${markerColor}20; color: ${markerColor}; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; margin-bottom: 10px; border: 1px solid ${markerColor}40;">
+                    <h6 style="margin: 0 0 10px 0; color: #0f172a; font-weight: 700; font-size: 15px; line-height: 1.4;">${row.Full_Address || 'N/A'}</h6>
+                    <span style="background: ${markerColor}15; color: ${markerColor}; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; margin-bottom: 12px; border: 1px solid ${markerColor}30;">
                         💰 ${price ? '$' + price.toLocaleString() : 'Price Withheld'}
                     </span>
-                    <div style="font-size: 13px; line-height: 1.7; margin-bottom: 12px;">
+                    <div style="font-size: 13.5px; line-height: 1.8; margin-bottom: 14px; background: #f8fafc; padding: 10px; border-radius: 8px;">
                         <b>🏠 Type:</b> ${row.Property_Type || 'N/A'}<br>
-                        <b>🛏️ Layout:</b> ${row.Beds || '-'} Bed | 🛁 ${row.Baths || '-'} Bath | 🚗 ${row.Car_Spaces || '-'}<br>
+                        <b>🛏️ Layout:</b> ${row.Beds || '-'} Bed &bull; 🛁 ${row.Baths || '-'} Bath &bull; 🚗 ${row.Car_Spaces || '-'}<br>
                         ${row.Land_Size_sqm ? `<b>📐 Land:</b> ${row.Land_Size_sqm} sqm` : ''}
                     </div>
-                    ${row.URL ? `<a href="${row.URL}" target="_blank" style="display: block; width: 100%; text-align: center; background: #3b82f6; color: white; padding: 8px 0; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 13px; transition: 0.2s;">View on Domain →</a>` : ''}
+                    ${row.URL ? `<a href="${row.URL}" target="_blank" style="display: block; width: 100%; text-align: center; background: #0f172a; color: white; padding: 10px 0; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; transition: 0.2s;">View on Source ↗</a>` : ''}
                 </div>
             `;
 
             const marker = L.circleMarker([row.Latitude, row.Longitude], {
-                radius: markerRadius, fillColor: markerColor, color: "#ffffff", weight: 1.5, opacity: 1, fillOpacity: 0.85
+                radius: markerRadius, fillColor: markerColor, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.9
             });
 
-            // Changed to bindPopup (CLICK to view) instead of bindTooltip (Hover)
             marker.bindPopup(popupContent);
             marker.addTo(markers);
         });
 
-        // Update Text Stats
+        // Add Animations to Text
         document.getElementById('totalProperties').innerText = totalProps.toLocaleString();
         document.getElementById('avgPrice').innerText = "$" + Math.round(validPriceCount ? totalPrice/validPriceCount : 0).toLocaleString();
         document.getElementById('avgBeds').innerText = (validBedsCount ? totalBeds/validBedsCount : 0).toFixed(1);
         document.getElementById('totalSuburbs').innerText = Object.keys(suburbCounts).length.toLocaleString();
 
-        // Draw All Charts
         drawSuburbChart(suburbCounts);
         drawTypeChart(typeCounts);
         drawPriceDistChart(priceRanges);
         drawBedsChart(bedsCounts);
     }
 
-    // 5. Beautiful Chart Drawing Functions
+    // 5. Upgraded Beautiful Chart Functions
     function drawSuburbChart(suburbCounts) {
         const sorted = Object.entries(suburbCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
         const ctx = document.getElementById('suburbChart').getContext('2d');
         if (suburbChartInstance) suburbChartInstance.destroy();
+
+        // Create a gradient for the bars
+        let gradient = ctx.createLinearGradient(0, 0, 0, 400);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.9)'); // Blue
+        gradient.addColorStop(1, 'rgba(14, 165, 233, 0.6)'); // Sky Blue
 
         suburbChartInstance = new Chart(ctx, {
             type: 'bar',
             data: {
                 labels: sorted.map(i => i[0]),
                 datasets: [{ 
+                    label: 'Properties',
                     data: sorted.map(i => i[1]), 
-                    backgroundColor: 'rgba(59, 130, 246, 0.8)', 
-                    borderColor: '#3b82f6',
-                    borderWidth: 1,
-                    borderRadius: 6,
-                    barPercentage: 0.7
+                    backgroundColor: gradient, 
+                    hoverBackgroundColor: '#2563eb',
+                    borderRadius: 8,
+                    barPercentage: 0.6
                 }]
             },
             options: {
                 responsive: true, maintainAspectRatio: false,
                 plugins: { legend: { display: false } },
                 scales: { 
-                    x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45, font: { weight: 500 } } },
-                    y: { grid: { color: '#f1f5f9' }, border: { display: false } }
-                }
+                    x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45, font: { weight: 500 } }, border: {display: false} },
+                    y: { border: { display: false, dash: [5, 5] }, beginAtZero: true }
+                },
+                animation: { duration: 1000, easing: 'easeOutQuart' }
             }
         });
     }
@@ -426,13 +450,16 @@
                 labels: Object.keys(typeCounts),
                 datasets: [{
                     data: Object.values(typeCounts),
-                    backgroundColor: ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#64748b'],
-                    borderWidth: 2, borderColor: '#ffffff'
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#94a3b8'],
+                    hoverOffset: 10,
+                    borderWidth: 3, 
+                    borderColor: '#ffffff'
                 }]
             },
             options: { 
-                responsive: true, maintainAspectRatio: false, cutout: '65%',
-                plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { weight: 500 } } } } 
+                responsive: true, maintainAspectRatio: false, cutout: '70%',
+                plugins: { legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { weight: 500 } } } },
+                layout: { padding: 10 }
             }
         });
     }
@@ -446,18 +473,19 @@
             data: {
                 labels: Object.keys(priceRanges),
                 datasets: [{
+                    label: 'Count',
                     data: Object.values(priceRanges),
-                    backgroundColor: ['#10b981', '#f59e0b', '#f97316', '#ef4444'],
-                    borderRadius: 6,
-                    barPercentage: 0.6
+                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
+                    borderRadius: 8,
+                    barPercentage: 0.5
                 }]
             },
             options: { 
                 responsive: true, maintainAspectRatio: false, 
                 plugins: { legend: { display: false } },
                 scales: {
-                    x: { grid: { display: false }, ticks: { font: { weight: 500 } } },
-                    y: { grid: { color: '#f1f5f9' }, border: { display: false } }
+                    x: { grid: { display: false }, ticks: { font: { weight: 500 } }, border: {display: false} },
+                    y: { border: { display: false, dash: [5, 5] }, beginAtZero: true }
                 }
             }
         });
@@ -468,18 +496,26 @@
         if (bedsChartInstance) bedsChartInstance.destroy();
 
         bedsChartInstance = new Chart(ctx, {
-            type: 'pie',
+            type: 'polarArea', // Polar Area chart gives a very professional analytical look
             data: {
                 labels: Object.keys(bedsCounts),
                 datasets: [{
                     data: Object.values(bedsCounts),
-                    backgroundColor: ['#e2e8f0', '#cbd5e1', '#94a3b8', '#64748b', '#334155'],
-                    borderWidth: 2, borderColor: '#ffffff'
+                    backgroundColor: [
+                        'rgba(59, 130, 246, 0.7)', 
+                        'rgba(16, 185, 129, 0.7)', 
+                        'rgba(245, 158, 11, 0.7)', 
+                        'rgba(139, 92, 246, 0.7)', 
+                        'rgba(100, 116, 139, 0.7)'
+                    ],
+                    borderWidth: 2, 
+                    borderColor: '#ffffff'
                 }]
             },
             options: { 
                 responsive: true, maintainAspectRatio: false, 
-                plugins: { legend: { position: 'bottom', labels: { padding: 15, font: { weight: 500 } } } } 
+                plugins: { legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, font: { weight: 500 } } } },
+                scales: { r: { ticks: { display: false }, grid: { color: 'rgba(0,0,0,0.05)' } } }
             }
         });
     }
