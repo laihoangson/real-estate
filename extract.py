@@ -22,7 +22,7 @@ prefs = {"profile.managed_default_content_settings.images": 2}
 chrome_options.add_experimental_option("prefs", prefs)
 
 # Mandatory settings for GitHub Actions (Ubuntu Server Environment)
-# chrome_options.add_argument("--headless=new") # Uncomment if running on server
+chrome_options.add_argument("--headless=new") 
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
