@@ -5,35 +5,33 @@ import random
 import pandas as pd
 import re
 from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+import undetected_chromedriver as uc
+# -----------------------------------
 
-print("🚀 STARTING OPTIMIZED HYBRID SCRAPER (15x15 GRID - STEALTH MODE) 🚀")
+print("🚀 STARTING OPTIMIZED HYBRID SCRAPER (UNDETECTED STEALTH MODE) 🚀")
+
+FILE_NAME = 'melbourne_full_hybrid_data.csv'
+GRID_SIZE = 15 
 
 # ==========================================
 # 1. BROWSER & SCRIPT CONFIGURATION
 # ==========================================
-FILE_NAME = 'melbourne_full_hybrid_data.csv'
-GRID_SIZE = 15 
-
-chrome_options = Options()
-chrome_options.page_load_strategy = 'eager' 
+options = uc.ChromeOptions()
+options.page_load_strategy = 'eager'
 prefs = {"profile.managed_default_content_settings.images": 2}
-chrome_options.add_experimental_option("prefs", prefs)
+options.add_experimental_option("prefs", prefs)
 
-# Mandatory settings for GitHub Actions (Ubuntu Server Environment)
-chrome_options.add_argument("--headless=new") 
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-chrome_options.add_argument("--remote-debugging-port=9222")
+# Cấu hình tối ưu cho Linux/GitHub Actions
+options.add_argument('--headless') # Bắt buộc phải có khi chạy trên server
+options.add_argument('--no-sandbox')
+options.add_argument('--disable-dev-shm-usage')
+options.add_argument('--disable-gpu')
+options.add_argument('--window-size=1920,1080')
+options.add_argument("--disable-software-rasterizer")
+options.add_argument('--disable-popup-blocking')
 
-# Spoofing User-Agent
-chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-
-driver = webdriver.Chrome(options=chrome_options)
+# Khởi tạo siêu trình duyệt (Nó sẽ tự tải ChromeDriver tương thích)
+driver = uc.Chrome(options=options, version_main=120) 
 
 # ==========================================
 # 2. HELPER FUNCTIONS
@@ -50,7 +48,6 @@ def extract_numeric_price(price_str):
     return None
 
 def human_delay(min_sec=1.5, max_sec=3.5):
-    """Giả lập độ trễ ngẫu nhiên của con người để chống bot"""
     time.sleep(random.uniform(min_sec, max_sec))
 
 # ==========================================
@@ -86,19 +83,17 @@ try:
             print(f"\n📍 Cell [{cell_idx}/{GRID_SIZE*GRID_SIZE}] | Coordinates: {t_lat:.3f},{l_lng:.3f} to {b_lat:.3f},{r_lng:.3f}")
             driver.get(f"{grid_url}&page=1")
             
-            # Tạm nghỉ lâu hơn khi sang ô mới
             human_delay(2.5, 4.5) 
             
             soup = BeautifulSoup(driver.page_source, 'html.parser')
             script_tag = soup.find('script', id='__NEXT_DATA__')
             
             if not script_tag: 
-                # Thử check xem có phải ô trống thật không hay là bị chặn
                 if "We couldn't find anything" in driver.page_source:
                     print("   -> (Empty) No properties in this grid cell.")
                 else:
                     print("   -> ⚠️ WARNING: Blocked by Anti-Bot. Taking a long break...")
-                    time.sleep(15) # Ngủ 15s nếu bị chặn để giải phóng IP
+                    time.sleep(15) 
                 continue
             
             data = json.loads(script_tag.string)
@@ -111,7 +106,6 @@ try:
             for page in range(1, total_pages + 1):
                 if page > 1:
                     driver.get(f"{grid_url}&page={page}")
-                    # Tạm nghỉ giữa các lần lật trang
                     human_delay(1.0, 2.5)
                     soup = BeautifulSoup(driver.page_source, 'html.parser')
                     script_tag = soup.find('script', id='__NEXT_DATA__')

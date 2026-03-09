@@ -4,3 +4,4 @@ selenium
 lxml
 aiohttp
 webdriver_manager
+undetected-chromedriver
