@@ -11,7 +11,7 @@ import undetected_chromedriver as uc
 print("🚀 STARTING OPTIMIZED HYBRID SCRAPER (UNDETECTED STEALTH MODE) 🚀")
 
 FILE_NAME = 'melbourne_full_hybrid_data.csv'
-GRID_SIZE = 15 
+GRID_SIZE = 11
 
 # ==========================================
 # 1. BROWSER & SCRIPT CONFIGURATION
@@ -21,8 +21,8 @@ options.page_load_strategy = 'eager'
 prefs = {"profile.managed_default_content_settings.images": 2}
 options.add_experimental_option("prefs", prefs)
 
-# Cấu hình tối ưu cho Linux/GitHub Actions
-options.add_argument('--headless') # Bắt buộc phải có khi chạy trên server
+# Linux/GitHub Actions
+options.add_argument('--headless') 
 options.add_argument('--no-sandbox')
 options.add_argument('--disable-dev-shm-usage')
 options.add_argument('--disable-gpu')

@@ -40,6 +40,7 @@ jobs:
       run: |
         git config --global user.name "laihoangson"
         git config --global user.email "lson21757@gmail.com"
-        git add melbourne_full_hybrid_data.csv
-        git commit -m "Auto update property data" || echo "No changes"
+        git add .
+        git commit -m "Auto update property data [skip ci]" || echo "No changes to commit"
+        git pull origin main --rebase
         git push
