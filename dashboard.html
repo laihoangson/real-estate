@@ -3,523 +3,973 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Melbourne Property Analytics Dashboard</title>
-    
+    <title>Melbourne Market Insight</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <link href="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
-    
     <style>
-        body { 
-            background-color: #f8fafc; /* Lighter, cleaner background */
-            font-family: 'Inter', sans-serif; 
-            color: #334155;
-            padding-bottom: 20px;
+        :root {
+            --bg: #f4f6fb;
+            --surface: #ffffff;
+            --surface2: #f0f2f8;
+            --border: rgba(0,0,0,0.07);
+            --border-hover: rgba(0,0,0,0.14);
+            --text: #1a1d27;
+            --text-muted: #7c8499;
+            --text-dim: #4a5168;
+            --accent: #2563eb;
+            --accent2: #f5f6f9;
+            --accent-light: rgba(37,99,235,0.08);
+            --emerald: #059669;
+            --emerald-light: rgba(5,150,105,0.08);
+            --amber: #d97706;
+            --rose: #e11d48;
+            --violet: #7c3aed;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+            /* range colors */
+            --c0: #059669;
+            --c1: #2563eb;
+            --c2: #d97706;
+            --c3: #e11d48;
+            --cw: #94a3b8;
         }
-        
-        /* Modern Header */
-        .dashboard-header { 
-            background: linear-gradient(135deg, #0f172a 0%, #3b82f6 100%);
-            padding: 25px 0; 
-            box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15); 
-            margin-bottom: 30px; 
-            color: white;
-            border-bottom-left-radius: 24px;
-            border-bottom-right-radius: 24px;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+        /* ── HEADER ── */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 32px 0 28px;
+            position: relative;
+            overflow: hidden;
+        }
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -60px; right: -60px;
+            width: 320px; height: 320px;
+            background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .header-inner {
+            max-width: 1440px; margin: 0 auto; padding: 0 40px;
+            display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px;
+        }
+        .header-eyebrow {
+            font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
+            color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
+        }
+        .header-eyebrow::before { content: ''; display: block; width: 18px; height: 2px; background: var(--accent); border-radius: 2px; }
+        .header-title { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 3vw, 2.8rem); line-height: 1.1; color: var(--text); font-weight: 400; }
+        .header-title em { font-style: italic; color: var(--accent); }
+        .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .live-badge {
+            display: flex; align-items: center; gap: 7px;
+            background: var(--emerald-light); border: 1px solid rgba(5,150,105,0.18);
+            color: var(--emerald); padding: 6px 13px; border-radius: 100px; font-size: 11.5px; font-weight: 600;
+        }
+        .live-dot { width: 6px; height: 6px; background: var(--emerald); border-radius: 50%; animation: livePulse 2s infinite; }
+        @keyframes livePulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+        .result-chip {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--accent-light); border: 1px solid rgba(37,99,235,0.2);
+            color: var(--accent); padding: 6px 13px; border-radius: 100px; font-size: 12px; font-weight: 600;
         }
 
-        /* Upgraded Cards */
-        .stat-card { 
-            text-align: center; 
-            padding: 24px 15px; 
-            border-radius: 20px; 
-            background: #fff; 
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
-            margin-bottom: 24px; 
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-            border: 1px solid #f1f5f9;
-        }
-        .stat-card:hover { 
-            transform: translateY(-4px); 
-            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); 
-        }
-        .stat-value { font-size: 34px; font-weight: 800; color: #0f172a; margin-top: 6px; letter-spacing: -1px; }
-        .stat-title { color: #64748b; font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; }
-        
-        /* Containers */
-        .chart-container { 
-            background: #fff; 
-            padding: 24px; 
-            border-radius: 20px; 
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-            height: 380px; 
-            position: relative; 
-            margin-bottom: 24px; 
-            border: 1px solid #f1f5f9;
-        }
-        .main-chart-container { height: 550px; }
-        #map { 
-            height: 550px; 
-            width: 100%; 
-            border-radius: 20px; 
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
-            z-index: 1;
-            border: 4px solid #fff;
-        }
+        /* ── MAIN ── */
+        .main { max-width: 1440px; margin: 0 auto; padding: 28px 40px 60px; }
 
-        /* Filter Section */
-        .filter-section { 
-            background: #fff; 
-            padding: 20px 24px; 
-            border-radius: 20px; 
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); 
-            margin-bottom: 24px; 
-            border: 1px solid #f1f5f9;
+        /* ── STATS ── */
+        .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
+        .stat-card {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            padding: 22px 22px 18px; position: relative; overflow: hidden;
+            transition: border-color .2s, box-shadow .2s, transform .2s;
+            box-shadow: var(--shadow-sm); animation: fadeUp .4s ease both;
         }
-        
-        /* Typography */
-        h5 { font-weight: 700; color: #1e293b; letter-spacing: -0.3px; font-size: 1.15rem; }
+        .stat-card::after {
+            content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
+            background: var(--bar-color, transparent); opacity: 0.7;
+        }
+        .stat-card:nth-child(1){animation-delay:.05s;--bar-color:var(--accent);}
+        .stat-card:nth-child(2){animation-delay:.1s;--bar-color:var(--emerald);}
+        .stat-card:nth-child(3){animation-delay:.15s;--bar-color:var(--amber);}
+        .stat-card:nth-child(4){animation-delay:.2s;--bar-color:var(--violet);}
+        .stat-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+        .stat-label { font-size: 10.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+        .stat-value { font-family: 'DM Serif Display', serif; font-size: 2.1rem; line-height: 1; font-weight: 400; }
+        .stat-value.c-accent { color: var(--accent); }
+        .stat-value.c-emerald { color: var(--emerald); }
+        .stat-value.c-amber { color: var(--amber); }
+        .stat-value.c-violet { color: var(--violet); }
+        .stat-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; }
 
-        /* Map UI */
-        .info.legend { background: rgba(255,255,255,0.95); padding: 15px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); line-height: 24px; color: #334155; font-size: 13px; font-weight: 600; backdrop-filter: blur(8px); }
-        .info.legend i { width: 14px; height: 14px; float: left; margin-right: 10px; border-radius: 4px; margin-top: 5px; }
-        .leaflet-popup-content-wrapper { border-radius: 16px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.15); padding: 5px; }
-        .leaflet-popup-content { margin: 12px 14px; line-height: 1.6; }
+        /* ── FILTER BAR ── */
+        .filter-bar {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap;
+            box-shadow: var(--shadow-sm);
+        }
+        .filter-group { display: flex; flex-direction: column; gap: 9px; }
+        .filter-label { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
 
-        /* Note box */
+        /* Suburb search */
+        .suburb-wrap { position: relative; min-width: 230px; }
+        .suburb-input-row {
+            display: flex; align-items: center; background: var(--surface2); border: 1.5px solid var(--border);
+            border-radius: 10px; padding: 0 12px; gap: 8px; transition: border-color .2s, box-shadow .2s;
+        }
+        .suburb-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+        .suburb-icon { color: var(--text-muted); font-size: 15px; flex-shrink: 0; }
+        .suburb-input-row input {
+            background: none; border: none; color: var(--text); font-family: 'DM Sans', sans-serif;
+            font-size: 13.5px; padding: 9px 0; outline: none; width: 100%;
+        }
+        .suburb-input-row input::placeholder { color: var(--text-muted); }
+        .suburb-clear { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 17px; padding: 0; display: none; line-height: 1; }
+        .suburb-clear.show { display: block; }
+        .suburb-dropdown {
+            position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+            background: var(--surface); border: 1px solid var(--border-hover); border-radius: 10px;
+            max-height: 220px; overflow-y: auto; z-index: 9000; display: none;
+            box-shadow: 0 16px 40px rgba(0,0,0,0.13);
+        }
+        .suburb-dropdown.open { display: block; }
+        .suburb-opt { padding: 9px 14px; font-size: 13px; cursor: pointer; transition: background .1s; color: var(--text-dim); }
+        .suburb-opt:hover { background: var(--accent-light); color: var(--accent); }
+        .suburb-opt.selected { color: var(--accent); font-weight: 600; }
+        .suburb-opt.no-results { color: var(--text-muted); cursor: default; font-style: italic; }
+        .suburb-dropdown::-webkit-scrollbar { width: 3px; }
+        .suburb-dropdown::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
+
+        /* ── PRICE RANGE INPUTS ── */
+        .price-range-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .price-input-box {
+            display: flex; align-items: center; gap: 6px;
+            background: var(--surface2); border: 1.5px solid var(--border);
+            border-radius: 10px; padding: 0 12px; transition: border-color .2s, box-shadow .2s;
+        }
+        .price-input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+        .price-input-box span { font-size: 12px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+        .price-input-box input {
+            background: none; border: none; outline: none; width: 90px;
+            font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); padding: 9px 0;
+        }
+        .price-input-box input::placeholder { color: var(--text-muted); }
+        .price-sep { color: var(--text-muted); font-size: 13px; font-weight: 500; flex-shrink: 0; }
+        .price-clear-btn {
+            background: none; border: 1.5px solid var(--border); border-radius: 8px;
+            padding: 6px 10px; font-size: 11px; color: var(--text-muted); cursor: pointer;
+            font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all .15s; white-space: nowrap;
+        }
+        .price-clear-btn:hover { border-color: var(--border-hover); color: var(--accent); }
+
+        /* Withheld checkbox */
+        .withheld-check {
+            display: flex; align-items: center; gap: 8px; cursor: pointer;
+            user-select: none; font-size: 12.5px; color: var(--text-dim); font-weight: 500;
+            padding: 4px 0;
+        }
+        .withheld-check input { display: none; }
+        .wcheck-box {
+            width: 17px; height: 17px; border-radius: 4px; border: 1.5px solid var(--border-hover);
+            background: var(--surface2); display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; transition: all .15s;
+        }
+        .withheld-check input:checked + .wcheck-box {
+            background: #64748b; border-color: #64748b;
+        }
+        .withheld-check input:checked + .wcheck-box svg { opacity: 1; }
+        .wcheck-box svg { opacity: 0; transition: opacity .15s; }
+
+        /* Type pills */
+        .type-pills { display: flex; gap: 7px; flex-wrap: wrap; }
+        .type-pill {
+            padding: 6px 13px; background: var(--surface2); border: 1.5px solid var(--border);
+            border-radius: 100px; cursor: pointer; user-select: none; font-size: 12.5px;
+            color: var(--text-muted); font-weight: 500; transition: all .18s;
+        }
+        .type-pill:hover { border-color: var(--border-hover); color: var(--text); }
+        .type-pill.on { background: var(--accent-light); border-color: rgba(37,99,235,0.3); color: var(--accent); font-weight: 600; }
+
+        /* ── CONTENT GRID ── */
+        .content-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-bottom: 18px; }
+        .charts-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; }
+
+        /* ── PANELS ── */
+        .panel {
+            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+            overflow: hidden; box-shadow: var(--shadow-sm); animation: fadeUp .45s ease .1s both;
+        }
+        .panel-head {
+            padding: 15px 20px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .panel-title { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
+        .panel-hint { font-size: 11.5px; color: var(--text-muted); }
+        .panel-body { padding: 18px 20px; }
+
+        /* ── MAP ── */
+        #map { height: 520px; width: 100%; }
+        .leaflet-container { background: #e8edf5 !important; }
+        .leaflet-popup-content-wrapper {
+            background: var(--surface) !important; border: 1px solid var(--border) !important;
+            border-radius: 12px !important; box-shadow: 0 16px 40px rgba(0,0,0,0.14) !important; color: var(--text) !important;
+        }
+        .leaflet-popup-tip { background: var(--surface) !important; }
+        .leaflet-popup-close-button { color: var(--text-muted) !important; font-size: 18px !important; padding: 8px 10px !important; }
+        .leaflet-popup-content { margin: 0 !important; }
+        .popup-body { font-family: 'DM Sans', sans-serif; min-width: 200px; padding: 16px; }
+        .popup-addr { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 7px; line-height: 1.4; }
+        .popup-price { font-family: 'DM Serif Display', serif; font-size: 1.45rem; margin-bottom: 12px; }
+        .popup-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+        .spec { background: var(--surface2); border-radius: 7px; padding: 7px 9px; }
+        .spec-l { font-size: 9.5px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .spec-v { font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+        .popup-btn {
+            display: block; text-align: center; background: var(--accent2); color: #fff;
+            padding: 9px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 12px; transition: opacity .2s;
+        }
+        .popup-btn:hover { opacity: 0.85; }
+
+        /* Map legend */
+        .mlegend {
+            background: rgba(255,255,255,0.96) !important; border: 1px solid rgba(0,0,0,0.08) !important;
+            border-radius: 11px !important; padding: 13px 16px !important; backdrop-filter: blur(12px);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+        }
+        .mlegend-title { font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 9px; font-family: 'DM Sans', sans-serif; }
+        .mlegend-row { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-dim); }
+        .mlegend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+        /* ── CHART CONTAINERS ── */
+        .cw280 { height: 280px; position: relative; }
+        .cw420 { height: 420px; position: relative; }
+
+        /* ── TOGGLE BUTTON ── */
+        .toggle-btn-group { display: flex; gap: 1px; background: var(--surface2); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
+        .toggle-btn {
+            padding: 5px 14px; font-size: 11px; font-weight: 600; border: none; background: none;
+            border-radius: 6px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif;
+            transition: all .15s; letter-spacing: 0.3px;
+        }
+        .toggle-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+
+        /* ── FOOTER ── */
         .footer-note {
-            background: #f0fdf4;
-            border-left: 5px solid #22c55e;
-            color: #166534;
-            padding: 16px 20px;
-            border-radius: 12px;
-            font-size: 14.5px;
-            font-weight: 500;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            background: rgba(37,99,235,0.04); border: 1px solid rgba(37,99,235,0.1);
+            border-radius: 12px; padding: 14px 20px; font-size: 12.5px; color: var(--text-muted); line-height: 1.7; margin-top: 14px;
         }
-        
-        /* Tom Select Overrides for custom look */
-        .ts-control { border-radius: 10px; padding: 10px 15px; border: 1px solid #cbd5e1; }
-        .ts-control.focus { border-color: #3b82f6; box-shadow: 0 0 0 0.25rem rgba(59, 130, 246, 0.15); }
+        .footer-note strong { color: var(--accent); }
+        .footer-note code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+
+        /* ── ANIMATIONS ── */
+        @keyframes fadeUp { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:translateY(0);} }
+
+        /* ── RESPONSIVE ── */
+        @media (max-width:1200px) { .content-grid{grid-template-columns:1fr;} .charts-row{grid-template-columns:1fr 1fr;} }
+        @media (max-width:768px) { .main,.header-inner{padding-left:20px;padding-right:20px;} .stats-row{grid-template-columns:1fr 1fr;} .charts-row{grid-template-columns:1fr 1fr;} .filter-bar{gap:18px;} }
+        @media (max-width:480px) { .charts-row{grid-template-columns:1fr;} }
     </style>
 </head>
 <body>
 
-<div class="dashboard-header">
-    <div class="container">
-        <h2 class="m-0 text-center fw-bold d-flex align-items-center justify-content-center">
-            <span style="font-size: 1.2em; margin-right: 12px;">🏘️</span> Melbourne Market Insight
-        </h2>
-        <p class="text-center m-0 mt-2 opacity-75" style="font-weight: 400; font-size: 1.05rem;">Interactive Real Estate Analytics Dashboard</p>
+<header class="header">
+    <div class="header-inner">
+        <div>
+            <div class="header-eyebrow">Real Estate Intelligence</div>
+            <h1 class="header-title">Melbourne <em>Market</em> Insight</h1>
+        </div>
+        <div class="header-right">
+            <div class="live-badge"><span class="live-dot"></span>Local Data Active</div>
+            <div id="resultChip"></div>
+        </div>
     </div>
-</div>
+</header>
 
-<div class="container-fluid px-xl-5 px-lg-4 px-3">
-    
-    <div class="row">
-        <div class="col-12">
-            <div class="filter-section d-flex flex-wrap align-items-center">
-                <label for="suburbFilter" class="fw-bold me-3 mb-0" style="color: #334155; font-size: 15px;">
-                    <i class="me-1">🔍</i> Search & Filter Suburb:
-                </label>
-                <div style="min-width: 300px; flex-grow: 1; max-width: 500px;">
-                    <select id="suburbFilter" autocomplete="off" placeholder="Type a suburb name...">
-                        <option value="ALL">All Suburbs (Entire Melbourne)</option>
-                    </select>
+<main class="main">
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-label">Total Properties</div>
+            <div class="stat-value c-accent" id="statTotal">—</div>
+            <div class="stat-sub">Matching filters</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Average Price</div>
+            <div class="stat-value c-emerald" id="statAvgPrice">—</div>
+            <div class="stat-sub">Priced listings</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Median Price</div>
+            <div class="stat-value c-amber" id="statMedian">—</div>
+            <div class="stat-sub">50th percentile</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Suburbs</div>
+            <div class="stat-value c-violet" id="statSuburbs">—</div>
+            <div class="stat-sub">In current view</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+        <!-- Suburb -->
+        <div class="filter-group">
+            <div class="filter-label">Suburb</div>
+            <div class="suburb-wrap">
+                <div class="suburb-input-row">
+                    <span class="suburb-icon">⌕</span>
+                    <input type="text" id="suburbInput" placeholder="Search suburb…" autocomplete="off">
+                    <button class="suburb-clear" id="suburbClear">×</button>
                 </div>
-                <span class="ms-3 text-muted fw-semibold mt-2 mt-md-0" id="filterResultText" style="font-size: 14px;"></span>
+                <div class="suburb-dropdown" id="suburbDrop"></div>
+            </div>
+        </div>
+
+        <!-- Price Range -->
+        <div class="filter-group">
+            <div class="filter-label">Price Range</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <div class="price-range-wrap">
+                    <div class="price-input-box">
+                        <span>$</span>
+                        <input type="text" id="priceMin" placeholder="Min" inputmode="numeric">
+                    </div>
+                    <span class="price-sep">—</span>
+                    <div class="price-input-box">
+                        <span>$</span>
+                        <input type="text" id="priceMax" placeholder="Max" inputmode="numeric">
+                    </div>
+                    <button class="price-clear-btn" id="priceClearBtn">Clear</button>
+                </div>
+                <label class="withheld-check">
+                    <input type="checkbox" id="showWithheld" checked>
+                    <span class="wcheck-box">
+                        <svg width="10" height="8" viewBox="0 0 10 8"><polyline points="1,4 4,7 9,1" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </span>
+                    Show price-withheld listings
+                </label>
+            </div>
+        </div>
+
+        <!-- Property Type -->
+        <div class="filter-group">
+            <div class="filter-label">Property Type</div>
+            <div class="type-pills" id="typePills">
+                <div class="type-pill on" data-t="ALL">All Types</div>
             </div>
         </div>
     </div>
 
-    <div class="row">
-        <div class="col-xl-3 col-md-6">
-            <div class="stat-card">
-                <div class="stat-title">Total Properties</div>
-                <div class="stat-value" id="totalProperties">0</div>
+    <!-- Map + Suburb Chart -->
+    <div class="content-grid">
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Valuation Map</span>
+                <span class="panel-hint">Click any point for details</span>
             </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stat-card">
-                <div class="stat-title">Average Price</div>
-                <div class="stat-value" style="color: #10b981;" id="avgPrice">$0</div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stat-card">
-                <div class="stat-title">Avg Bedrooms</div>
-                <div class="stat-value" style="color: #3b82f6;" id="avgBeds">0</div>
-            </div>
-        </div>
-        <div class="col-xl-3 col-md-6">
-            <div class="stat-card">
-                <div class="stat-title">Suburbs Displayed</div>
-                <div class="stat-value" style="color: #8b5cf6;" id="totalSuburbs">0</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-2">
-        <div class="col-xl-8 col-lg-7 mb-4">
-            <h5 class="mb-3">📍 Property Valuation Map <span style="font-size: 13px; font-weight: 500; color: #94a3b8;">(Click points for details)</span></h5>
             <div id="map"></div>
         </div>
-        
-        <div class="col-xl-4 col-lg-5 mb-4">
-            <h5 class="mb-3">📊 Top 10 Suburbs by Volume</h5>
-            <div class="chart-container main-chart-container">
-                <canvas id="suburbChart"></canvas>
+
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Top 10 by Volume</span>
+            </div>
+            <div class="panel-body">
+                <div class="cw420"><canvas id="suburbChart"></canvas></div>
             </div>
         </div>
     </div>
 
-    <div class="row mt-1">
-        <div class="col-lg-4 col-md-12">
-            <h5 class="mb-3 text-center">🏠 Properties by Type</h5>
-            <div class="chart-container">
-                <canvas id="typeChart"></canvas>
-            </div>
-        </div>
-        
-        <div class="col-lg-4 col-md-12">
-            <h5 class="mb-3 text-center">💰 Price Distribution</h5>
-            <div class="chart-container">
-                <canvas id="priceDistChart"></canvas>
-            </div>
-        </div>
-
-        <div class="col-lg-4 col-md-12">
-            <h5 class="mb-3 text-center">🛏️ Bedrooms Breakdown</h5>
-            <div class="chart-container">
-                <canvas id="bedsChart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mt-3 mb-5">
-        <div class="col-12">
-            <div class="footer-note d-flex align-items-center">
-                <span style="font-size: 22px; margin-right: 15px;">💡</span>
-                <div>
-                    <strong>Data Processing Note:</strong> This dashboard directly processes the local <code>melbourne_full_hybrid_data.csv</code> file within your browser. 
-                    No data is uploaded to external servers. <b>Click on any colored point</b> on the map to view detailed information about the property.
+    <!-- Bottom Charts -->
+    <div class="charts-row">
+        <!-- Suburb Avg Price toggle chart -->
+        <div class="panel">
+            <div class="panel-head">
+                <span class="panel-title">Suburbs by Avg Price</span>
+                <div class="toggle-btn-group">
+                    <button class="toggle-btn active" id="btnHighest" onclick="setSuburbPriceMode('highest')">Highest</button>
+                    <button class="toggle-btn" id="btnLowest" onclick="setSuburbPriceMode('lowest')">Lowest</button>
                 </div>
             </div>
+            <div class="panel-body"><div class="cw280"><canvas id="suburbPriceChart"></canvas></div></div>
+        </div>
+
+        <!-- Histogram: Price Distribution -->
+        <div class="panel">
+            <div class="panel-head"><span class="panel-title">Price Distribution</span></div>
+            <div class="panel-body"><div class="cw280"><canvas id="priceChart"></canvas></div></div>
+        </div>
+
+        <!-- Property Type -->
+        <div class="panel">
+            <div class="panel-head"><span class="panel-title">Property Types</span></div>
+            <div class="panel-body"><div class="cw280"><canvas id="typeChart"></canvas></div></div>
+        </div>
+
+        <!-- Bedrooms -->
+        <div class="panel">
+            <div class="panel-head"><span class="panel-title">Bedrooms Breakdown</span></div>
+            <div class="panel-body"><div class="cw280"><canvas id="bedsChart"></canvas></div></div>
         </div>
     </div>
-</div>
+
+    <div class="footer-note">
+        <strong>Data Note:</strong> Processes <code>data/melbourne_full_hybrid_data.csv</code> locally — no data leaves your browser.
+    </div>
+</main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/tom-select@2.2.2/dist/js/tom-select.complete.min.js"></script>
-
 <script>
-    // Global Config for Beautiful Charts
-    Chart.defaults.font.family = "'Inter', sans-serif";
-    Chart.defaults.color = '#64748b';
-    Chart.defaults.scale.grid.color = 'rgba(241, 245, 249, 0.8)'; // Lighter dashed grid
+/* ── Chart defaults (light) ── */
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.color = '#7c8499';
+Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255,255,255,0.98)';
+Chart.defaults.plugins.tooltip.borderColor = 'rgba(0,0,0,0.08)';
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.plugins.tooltip.padding = 12;
+Chart.defaults.plugins.tooltip.cornerRadius = 10;
+Chart.defaults.plugins.tooltip.titleColor = '#1a1d27';
+Chart.defaults.plugins.tooltip.bodyColor = '#4a5168';
+Chart.defaults.plugins.tooltip.titleFont = { size: 13, weight: '700' };
+Chart.defaults.plugins.tooltip.bodyFont  = { size: 12 };
+Chart.defaults.plugins.tooltip.displayColors = false;
+
+/* ── STATE ── */
+let allData = [], suburbs = [];
+let selSuburb = 'ALL', activeType = 'ALL';
+let priceMinVal = null, priceMaxVal = null, showWithheld = true;
+let charts = {}, suburbPriceMode = 'highest';
+let cachedSuburbAvg = {};
+
+const RANGE_COLORS = { '0':'#059669','1':'#2563eb','2':'#d97706','3':'#e11d48','w':'#94a3b8' };
+
+function priceRange(p) {
+    if (!p || isNaN(p)) return 'w';
+    if (p < 750000) return '0';
+    if (p < 1500000) return '1';
+    if (p < 3000000) return '2';
+    return '3';
+}
+
+/* ── MAP ── */
+const map = L.map('map', { zoomControl: true, attributionControl: false }).setView([-37.8136,144.9631],10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+const markerLayer = L.layerGroup().addTo(map);
+
+function dotRadius(zoom) {
+    if (zoom <= 9) return 3;
+    if (zoom <= 11) return 4;
+    if (zoom <= 13) return 5;
+    if (zoom <= 15) return 6;
+    return 7;
+}
+
+map.on('zoomend', () => {
+    const r = dotRadius(map.getZoom());
+    markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
+});
+
+const legend = L.control({ position: 'bottomright' });
+legend.onAdd = function() {
+    const d = L.DomUtil.create('div','mlegend');
+    d.innerHTML = `
+        <div class="mlegend-title">Price Range</div>
+        <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
+        <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
+        <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
+        <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
+        <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>Withheld</div>`;
+    return d;
+};
+legend.addTo(map);
+
+/* ── SUBURB SEARCH ── */
+const subInput = document.getElementById('suburbInput');
+const subDrop  = document.getElementById('suburbDrop');
+const subClear = document.getElementById('suburbClear');
+const resultChip = document.getElementById('resultChip');
+
+function renderDrop(q) {
+    const list = q.length === 0
+        ? ['All Suburbs', ...suburbs]
+        : ['All Suburbs', ...suburbs.filter(s => s.toLowerCase().includes(q.toLowerCase()))];
     
-    // Custom Tooltip Styling globally
-    Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(15, 23, 42, 0.9)';
-    Chart.defaults.plugins.tooltip.padding = 12;
-    Chart.defaults.plugins.tooltip.cornerRadius = 8;
-    Chart.defaults.plugins.tooltip.titleFont = { size: 14, weight: 'bold' };
-    Chart.defaults.plugins.tooltip.bodyFont = { size: 13 };
-
-    let globalData = [];
-    let tomSelectInstance = null;
-
-    // 1. Initialize Map
-    const map = L.map('map').setView([-37.8136, 144.9631], 10);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; OSM &copy; CARTO',
-        subdomains: 'abcd',
-        maxZoom: 19
-    }).addTo(map);
-
-    let markers = L.layerGroup().addTo(map);
-
-    let suburbChartInstance = null;
-    let typeChartInstance = null;
-    let priceDistChartInstance = null;
-    let bedsChartInstance = null;
-
-    function getPriceColor(price) {
-        if (!price || isNaN(price)) return '#cbd5e1'; // Slate 300
-        if (price < 750000) return '#10b981';  // Emerald 500
-        if (price < 1500000) return '#3b82f6'; // Blue 500 (Swapped amber for modern blue)
-        if (price < 3000000) return '#f59e0b'; // Amber 500
-        return '#ef4444';                      // Red 500
+    subDrop.innerHTML = list.slice(0,60).map(s => {
+        const v = s === 'All Suburbs' ? 'ALL' : s;
+        return `<div class="suburb-opt ${v===selSuburb?'selected':''}" data-v="${v}">${s}</div>`;
+    }).join('');
+    
+    if (list.length === 0) {
+        subDrop.innerHTML = '<div class="suburb-opt no-results">No results</div>';
     }
+    
+    subDrop.querySelectorAll('.suburb-opt:not(.no-results)').forEach(el => {
+        el.addEventListener('mousedown', e => { 
+            e.preventDefault(); 
+            setSuburb(el.dataset.v); 
+            subDrop.classList.remove('open');
+        });
+    });
+}
 
-    // Map Legend
-    const legend = L.control({position: 'bottomright'});
-    legend.onAdd = function (map) {
-        const div = L.DomUtil.create('div', 'info legend');
-        const grades = [0, 750000, 1500000, 3000000];
-        const labels = ['Under $750k', '$750k - $1.5M', '$1.5M - $3M', 'Over $3M'];
-        const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'];
+function setSuburb(v) {
+    selSuburb = v;
+    subInput.value = v === 'ALL' ? '' : v;
+    subClear.classList.toggle('show', v !== 'ALL');
+    
+    // Update result chip
+    resultChip.innerHTML = v !== 'ALL' ? `<div class="result-chip">◉ ${v}</div>` : '';
+    
+    if (v !== 'ALL' && allData.length) {
+        const row = allData.find(r => r.Suburb === v);
+        if (row) map.setView([row.Latitude, row.Longitude], 13);
+    }
+    applyFilters();
+}
 
-        div.innerHTML = '<div style="margin-bottom:10px; font-size:14px; color:#0f172a;"><strong>Price Range</strong></div>';
-        for (let i = 0; i < grades.length; i++) {
-            div.innerHTML += '<i style="background:' + colors[i] + '"></i> ' + labels[i] + '<br>';
+subInput.addEventListener('focus', () => { 
+    renderDrop(subInput.value); 
+    subDrop.classList.add('open'); 
+});
+
+subInput.addEventListener('input', () => { 
+    renderDrop(subInput.value); 
+    subDrop.classList.add('open'); 
+});
+
+subInput.addEventListener('blur',  () => setTimeout(() => subDrop.classList.remove('open'), 160));
+
+subClear.addEventListener('click', () => setSuburb('ALL'));
+
+/* ── PRICE RANGE INPUTS ── */
+function parsePriceInput(v) {
+    if (!v) return null;
+    v = v.replace(/,/g,'').trim().toLowerCase();
+    if (v.endsWith('m')) return parseFloat(v) * 1000000;
+    if (v.endsWith('k')) return parseFloat(v) * 1000;
+    return parseFloat(v) || null;
+}
+
+const priceMinEl  = document.getElementById('priceMin');
+const priceMaxEl  = document.getElementById('priceMax');
+const priceClearEl = document.getElementById('priceClearBtn');
+const withheldEl  = document.getElementById('showWithheld');
+
+function onPriceChange() {
+    priceMinVal = parsePriceInput(priceMinEl.value);
+    priceMaxVal = parsePriceInput(priceMaxEl.value);
+    applyFilters();
+}
+
+priceMinEl.addEventListener('change', onPriceChange);
+priceMaxEl.addEventListener('change', onPriceChange);
+priceMinEl.addEventListener('keydown', e => { if(e.key==='Enter') onPriceChange(); });
+priceMaxEl.addEventListener('keydown', e => { if(e.key==='Enter') onPriceChange(); });
+
+priceClearEl.addEventListener('click', () => {
+    priceMinEl.value = ''; priceMaxEl.value = '';
+    priceMinVal = null; priceMaxVal = null;
+    applyFilters();
+});
+
+withheldEl.addEventListener('change', function() {
+    showWithheld = this.checked;
+    applyFilters();
+});
+
+/* ── TYPE PILLS ── */
+document.getElementById('typePills').addEventListener('click', e => {
+    const pill = e.target.closest('.type-pill');
+    if (!pill) return;
+    document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('on'));
+    pill.classList.add('on');
+    activeType = pill.dataset.t;
+    applyFilters();
+});
+
+function buildTypes(data) {
+    const types = [...new Set(data.map(r => r.Property_Type).filter(Boolean))].sort();
+    const wrap = document.getElementById('typePills');
+    wrap.innerHTML = '<div class="type-pill on" data-t="ALL">All Types</div>';
+    types.forEach(t => {
+        const d = document.createElement('div');
+        d.className = 'type-pill'; d.dataset.t = t; d.textContent = t;
+        wrap.appendChild(d);
+    });
+}
+
+/* ── LOAD ── */
+window.onload = () => {
+    Papa.parse("data/melbourne_full_hybrid_data.csv", {
+        download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
+        complete: res => {
+            if (!res.data?.length) return;
+            allData = res.data.filter(r => r.Latitude && r.Longitude);
+            suburbs = [...new Set(allData.map(r => r.Suburb).filter(Boolean))].sort();
+            buildTypes(allData);
+            applyFilters();
         }
-        div.innerHTML += '<i style="background:#cbd5e1"></i> Price Withheld';
-        return div;
-    };
-    legend.addTo(map);
+    });
+};
 
-    // 2. Load CSV
-    window.onload = function() {
-        Papa.parse("data/melbourne_full_hybrid_data.csv", {
-            download: true,
-            header: true,
-            dynamicTyping: true,
-            skipEmptyLines: true,
-            complete: function(results) {
-                if(results.data && results.data.length > 0) {
-                    globalData = results.data.filter(row => row.Latitude && row.Longitude);
-                    setupFilter(globalData);
-                    processData(globalData); 
-                }
+/* ── FILTERS ── */
+function applyFilters() {
+    let data = allData;
+    if (selSuburb !== 'ALL') data = data.filter(r => r.Suburb === selSuburb);
+
+    data = data.filter(r => {
+        const p = r.Numeric_Price;
+        const hasPrice = p && !isNaN(p);
+        if (!hasPrice) return showWithheld;
+        if (priceMinVal !== null && p < priceMinVal) return false;
+        if (priceMaxVal !== null && p > priceMaxVal) return false;
+        return true;
+    });
+
+    if (activeType !== 'ALL') data = data.filter(r => r.Property_Type === activeType);
+    render(data);
+}
+
+/* ── RENDER ── */
+function render(data) {
+    let tPrice=0, nPrice=0;
+    let subCnt={}, subPriceSum={}, subPriceCnt={}, typeCnt={};
+    let bDist={ '1 Bed':0,'2 Beds':0,'3 Beds':0,'4 Beds':0,'5+ Beds':0 };
+    let prices = [];
+
+    markerLayer.clearLayers();
+    const r0 = dotRadius(map.getZoom());
+
+    data.forEach(row => {
+        const p = row.Numeric_Price;
+        if (p && !isNaN(p)) {
+            tPrice += p; nPrice++; prices.push(p);
+            if (row.Suburb) {
+                subPriceSum[row.Suburb] = (subPriceSum[row.Suburb]||0) + p;
+                subPriceCnt[row.Suburb] = (subPriceCnt[row.Suburb]||0) + 1;
             }
-        });
-    };
-
-    // 3. Setup Dropdown Filter with Tom Select
-    function setupFilter(data) {
-        const suburbs = [...new Set(data.map(item => item.Suburb).filter(Boolean))].sort();
-        const select = document.getElementById('suburbFilter');
+        }
         
-        suburbs.forEach(suburb => {
-            const option = document.createElement('option');
-            option.value = suburb;
-            option.textContent = suburb;
-            select.appendChild(option);
-        });
+        const b = row.Beds;
+        if (b && !isNaN(b)) {
+            if (b===1) bDist['1 Bed']++;
+            else if (b===2) bDist['2 Beds']++;
+            else if (b===3) bDist['3 Beds']++;
+            else if (b===4) bDist['4 Beds']++;
+            else bDist['5+ Beds']++;
+        }
+        
+        if (row.Suburb) subCnt[row.Suburb] = (subCnt[row.Suburb]||0) + 1;
 
-        // Initialize Tom Select for Autocomplete
-        tomSelectInstance = new TomSelect("#suburbFilter", {
-            create: false,
-            sortField: { field: "text", direction: "asc" },
-            maxOptions: 50
-        });
+        const t = row.Property_Type || 'Unknown';
+        typeCnt[t] = (typeCnt[t]||0) + 1;
 
-        select.addEventListener('change', function() {
-            const selectedSuburb = this.value;
-            let filteredData = globalData;
+        const color = RANGE_COLORS[priceRange(p)];
+        const popup = `
+<div class="popup-body">
+  <div class="popup-addr">${row.Full_Address || 'Address unavailable'}</div>
+  <div class="popup-price" style="color:${color}">${p ? '$'+p.toLocaleString() : 'Price Withheld'}</div>
+  <div class="popup-specs">
+    <div class="spec"><div class="spec-l">Type</div><div class="spec-v">${row.Property_Type || 'N/A'}</div></div>
+    <div class="spec"><div class="spec-l">Suburb</div><div class="spec-v">${row.Suburb || 'N/A'}</div></div>
+    <div class="spec"><div class="spec-l">Bedrooms</div><div class="spec-v">${row.Beds || '—'}</div></div>
+    <div class="spec"><div class="spec-l">Bathrooms</div><div class="spec-v">${row.Baths || '—'}</div></div>
+    ${row.Car_Spaces != null ? `<div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${row.Car_Spaces}</div></div>` : ''}
+    ${row.Land_Size_sqm ? `<div class="spec"><div class="spec-l">Land</div><div class="spec-v">${row.Land_Size_sqm} m²</div></div>` : ''}
+  </div>
+  ${row.URL ? `<a href="${row.URL}" target="_blank" class="popup-btn">View Listing →</a>` : ''}
+</div>`;
+        
+        L.circleMarker([row.Latitude, row.Longitude], {
+            radius: r0, 
+            fillColor: color, 
+            color: 'rgba(255,255,255,0.6)', 
+            weight: 1.2, 
+            opacity: 1, 
+            fillOpacity: 0.85
+        }).bindPopup(popup, {maxWidth: 280}).addTo(markerLayer);
+    });
 
-            if (selectedSuburb !== 'ALL' && selectedSuburb !== '') {
-                filteredData = globalData.filter(row => row.Suburb === selectedSuburb);
-                document.getElementById('filterResultText').innerHTML = `<span style="color: #3b82f6;">Viewing:</span> ${selectedSuburb}`;
-                if(filteredData.length > 0) {
-                    map.setView([filteredData[0].Latitude, filteredData[0].Longitude], 14);
-                }
-            } else {
-                document.getElementById('filterResultText').innerText = '';
-                map.setView([-37.8136, 144.9631], 10);
-            }
-            processData(filteredData);
-        });
-    }
+    // Median
+    prices.sort((a,b)=>a-b);
+    const median = prices.length ? (prices.length%2===0 ? (prices[prices.length/2-1]+prices[prices.length/2])/2 : prices[Math.floor(prices.length/2)]) : 0;
 
-    // 4. Process Data & Draw UI
-    function processData(data) {
-        let totalProps = 0, totalPrice = 0, validPriceCount = 0, totalBeds = 0, validBedsCount = 0;
-        let suburbCounts = {};
-        let typeCounts = {};
-        let priceRanges = { '< $750k': 0, '$750k - $1.5M': 0, '$1.5M - $3M': 0, '> $3M': 0 };
-        let bedsCounts = { '1 Bed': 0, '2 Beds': 0, '3 Beds': 0, '4 Beds': 0, '5+ Beds': 0 };
+    // Suburb avg prices cache
+    cachedSuburbAvg = {};
+    Object.keys(subPriceSum).forEach(s => {
+        if (subPriceCnt[s] >= 3) cachedSuburbAvg[s] = subPriceSum[s] / subPriceCnt[s];
+    });
 
-        markers.clearLayers(); 
+    document.getElementById('statTotal').textContent = data.length.toLocaleString();
+    document.getElementById('statAvgPrice').textContent = nPrice ? '$'+Math.round(tPrice/nPrice).toLocaleString() : '—';
+    document.getElementById('statMedian').textContent = median ? '$'+Math.round(median).toLocaleString() : '—';
+    document.getElementById('statSuburbs').textContent = Object.keys(subCnt).length.toLocaleString();
 
-        data.forEach(row => {
-            totalProps++;
-            const price = row.Numeric_Price;
-            
-            if (price && !isNaN(price)) {
-                totalPrice += price;
-                validPriceCount++;
-                if (price < 750000) priceRanges['< $750k']++;
-                else if (price < 1500000) priceRanges['$750k - $1.5M']++;
-                else if (price < 3000000) priceRanges['$1.5M - $3M']++;
-                else priceRanges['> $3M']++;
-            }
+    drawSuburbVolume(subCnt);
+    drawSuburbPrice();
+    drawHistogram(prices);
+    drawType(typeCnt);
+    drawBeds(bDist);
+}
 
-            if (row.Beds && !isNaN(row.Beds)) {
-                totalBeds += row.Beds;
-                validBedsCount++;
-                if(row.Beds === 1) bedsCounts['1 Bed']++;
-                else if(row.Beds === 2) bedsCounts['2 Beds']++;
-                else if(row.Beds === 3) bedsCounts['3 Beds']++;
-                else if(row.Beds === 4) bedsCounts['4 Beds']++;
-                else bedsCounts['5+ Beds']++;
-            }
+/* ── SUBURB PRICE TOGGLE ── */
+function setSuburbPriceMode(mode) {
+    suburbPriceMode = mode;
+    document.getElementById('btnHighest').classList.toggle('active', mode==='highest');
+    document.getElementById('btnLowest').classList.toggle('active', mode==='lowest');
+    drawSuburbPrice();
+}
+window.setSuburbPriceMode = setSuburbPriceMode;
 
-            if (row.Suburb) suburbCounts[row.Suburb] = (suburbCounts[row.Suburb] || 0) + 1;
-            const type = row.Property_Type || 'Unknown';
-            typeCounts[type] = (typeCounts[type] || 0) + 1;
+/* ── CHARTS ── */
+function destroyChart(k) { if(charts[k]){charts[k].destroy(); delete charts[k];} }
 
-            const markerColor = getPriceColor(price);
-            const markerRadius = (price && price > 3000000) ? 6 : 5; 
-
-            const popupContent = `
-                <div style="font-family: 'Inter', sans-serif; min-width: 220px; color: #334155;">
-                    <h6 style="margin: 0 0 10px 0; color: #0f172a; font-weight: 700; font-size: 15px; line-height: 1.4;">${row.Full_Address || 'N/A'}</h6>
-                    <span style="background: ${markerColor}15; color: ${markerColor}; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 14px; display: inline-block; margin-bottom: 12px; border: 1px solid ${markerColor}30;">
-                        💰 ${price ? '$' + price.toLocaleString() : 'Price Withheld'}
-                    </span>
-                    <div style="font-size: 13.5px; line-height: 1.8; margin-bottom: 14px; background: #f8fafc; padding: 10px; border-radius: 8px;">
-                        <b>🏠 Type:</b> ${row.Property_Type || 'N/A'}<br>
-                        <b>🛏️ Layout:</b> ${row.Beds || '-'} Bed &bull; 🛁 ${row.Baths || '-'} Bath &bull; 🚗 ${row.Car_Spaces || '-'}<br>
-                        ${row.Land_Size_sqm ? `<b>📐 Land:</b> ${row.Land_Size_sqm} sqm` : ''}
-                    </div>
-                    ${row.URL ? `<a href="${row.URL}" target="_blank" style="display: block; width: 100%; text-align: center; background: #0f172a; color: white; padding: 10px 0; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 13px; transition: 0.2s;">View on Source ↗</a>` : ''}
-                </div>
-            `;
-
-            const marker = L.circleMarker([row.Latitude, row.Longitude], {
-                radius: markerRadius, fillColor: markerColor, color: "#ffffff", weight: 2, opacity: 1, fillOpacity: 0.9
-            });
-
-            marker.bindPopup(popupContent);
-            marker.addTo(markers);
-        });
-
-        // Add Animations to Text
-        document.getElementById('totalProperties').innerText = totalProps.toLocaleString();
-        document.getElementById('avgPrice').innerText = "$" + Math.round(validPriceCount ? totalPrice/validPriceCount : 0).toLocaleString();
-        document.getElementById('avgBeds').innerText = (validBedsCount ? totalBeds/validBedsCount : 0).toFixed(1);
-        document.getElementById('totalSuburbs').innerText = Object.keys(suburbCounts).length.toLocaleString();
-
-        drawSuburbChart(suburbCounts);
-        drawTypeChart(typeCounts);
-        drawPriceDistChart(priceRanges);
-        drawBedsChart(bedsCounts);
-    }
-
-    // 5. Upgraded Beautiful Chart Functions
-    function drawSuburbChart(suburbCounts) {
-        const sorted = Object.entries(suburbCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
-        const ctx = document.getElementById('suburbChart').getContext('2d');
-        if (suburbChartInstance) suburbChartInstance.destroy();
-
-        // Create a gradient for the bars
-        let gradient = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.9)'); // Blue
-        gradient.addColorStop(1, 'rgba(14, 165, 233, 0.6)'); // Sky Blue
-
-        suburbChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: sorted.map(i => i[0]),
-                datasets: [{ 
-                    label: 'Properties',
-                    data: sorted.map(i => i[1]), 
-                    backgroundColor: gradient, 
-                    hoverBackgroundColor: '#2563eb',
-                    borderRadius: 8,
-                    barPercentage: 0.6
-                }]
+function drawSuburbVolume(subCnt) {
+    destroyChart('suburbVol');
+    const sorted = Object.entries(subCnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    const ctx = document.getElementById('suburbChart').getContext('2d');
+    charts.suburbVol = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sorted.map(i=>i[0]),
+            datasets: [{ 
+                data: sorted.map(i=>i[1]),
+                backgroundColor: 'rgba(37,99,235,0.1)', 
+                hoverBackgroundColor: 'rgba(37,99,235,0.22)',
+                borderColor: 'rgba(37,99,235,0.5)', 
+                borderWidth: 1.5,
+                borderRadius: 6, 
+                borderSkipped: false, 
+                barPercentage: 0.62 
+            }]
+        },
+        options: {
+            indexAxis:'y', 
+            responsive:true, 
+            maintainAspectRatio:false,
+            plugins:{ 
+                legend:{display:false}, 
+                tooltip:{callbacks:{label:c=>' '+c.parsed.x.toLocaleString()+' properties'}} 
             },
-            options: {
-                responsive: true, maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: { 
-                    x: { grid: { display: false }, ticks: { maxRotation: 45, minRotation: 45, font: { weight: 500 } }, border: {display: false} },
-                    y: { border: { display: false, dash: [5, 5] }, beginAtZero: true }
+            scales:{
+                x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}}},
+                y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}}
+            },
+            animation:{duration:500,easing:'easeOutQuart'}
+        }
+    });
+}
+
+function drawSuburbPrice() {
+    destroyChart('suburbPrice');
+    const entries = Object.entries(cachedSuburbAvg);
+    if (!entries.length) return;
+
+    const sorted = entries.sort((a,b) => suburbPriceMode==='highest' ? b[1]-a[1] : a[1]-b[1]).slice(0,10);
+    const color = suburbPriceMode==='highest' ? '#e11d48' : '#059669';
+    const bgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.08)' : 'rgba(5,150,105,0.08)';
+
+    const ctx = document.getElementById('suburbPriceChart').getContext('2d');
+    charts.suburbPrice = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: sorted.map(i=>i[0]),
+            datasets: [{
+                data: sorted.map(i=>Math.round(i[1])),
+                backgroundColor: bgAlpha,
+                hoverBackgroundColor: bgAlpha.replace('0.08','0.18'),
+                borderColor: color+'99',
+                borderWidth: 1.5,
+                borderRadius: 6, 
+                borderSkipped: false, 
+                barPercentage: 0.62
+            }]
+        },
+        options: {
+            indexAxis:'y', 
+            responsive:true, 
+            maintainAspectRatio:false,
+            plugins:{ 
+                legend:{display:false}, 
+                tooltip:{callbacks:{label:c=>' $'+c.parsed.x.toLocaleString()}} 
+            },
+            scales:{
+                x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}, callback:v=>'$'+(v>=1000000?(v/1000000).toFixed(1)+'M':(v/1000).toFixed(0)+'k')}},
+                y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}}
+            },
+            animation:{duration:400,easing:'easeOutQuart'}
+        }
+    });
+}
+
+function drawHistogram(prices) {
+    destroyChart('price');
+    if (!prices.length) return;
+
+    const BIN = 250000;
+    const MAX_BIN = 5000000;
+    const bins = [];
+    for (let lo = 0; lo < MAX_BIN; lo += BIN) {
+        const hi = lo + BIN;
+        bins.push({ label: '$'+(hi/1000)+'k', min: lo, max: hi });
+    }
+    bins.push({ label: '>$5M', min: MAX_BIN, max: Infinity });
+
+    const counts = bins.map(b => prices.filter(p => p >= b.min && p < b.max).length);
+    const colors = bins.map(b => {
+        const mid = b.max === Infinity ? 6000000 : (b.min + b.max) / 2;
+        return RANGE_COLORS[priceRange(mid)];
+    });
+
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    charts.price = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: bins.map(b => b.label),
+            datasets: [{
+                data: counts,
+                backgroundColor: colors.map(c => c + '28'),
+                borderColor: colors,
+                borderWidth: 1.5,
+                borderRadius: 0,
+                borderSkipped: false,
+                barPercentage: 1.0,
+                categoryPercentage: 1.0
+            }]
+        },
+        options: {
+            responsive: true, 
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: items => {
+                            const b = bins[items[0].dataIndex];
+                            const lo = b.min === 0 ? '$0' : '$'+(b.min/1000)+'k';
+                            const hi = b.max === Infinity ? '∞' : '$'+(b.max/1000)+'k';
+                            return `${lo} – ${hi}`;
+                        },
+                        label: c => ' ' + c.parsed.y.toLocaleString() + ' properties'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    grid: { display: false }, 
+                    border: { display: false },
+                    ticks: { color: '#7c8499', font: { size: 9.5 }, maxRotation: 45, minRotation: 45 }
                 },
-                animation: { duration: 1000, easing: 'easeOutQuart' }
+                y: { grid: { color: 'rgba(0,0,0,0.05)' }, border: { display: false }, ticks: { color: '#7c8499', font: { size: 11 } } }
             }
-        });
+        }
+    });
+}
+
+function drawType(typeCnt) {
+    destroyChart('type');
+    if (!Object.keys(typeCnt).length) return;
+
+    const sortedEntries = Object.entries(typeCnt).sort((a,b) => b[1]-a[1]);
+    
+    let labels, vals;
+    
+    if (sortedEntries.length <= 8) {
+        labels = sortedEntries.map(e => e[0]);
+        vals = sortedEntries.map(e => e[1]);
+    } else {
+        const top8 = sortedEntries.slice(0, 8);
+        const otherSum = sortedEntries.slice(8).reduce((sum, entry) => sum + entry[1], 0);
+        
+        labels = [...top8.map(e => e[0]), 'Other'];
+        vals = [...top8.map(e => e[1]), otherSum];
     }
 
-    function drawTypeChart(typeCounts) {
-        const ctx = document.getElementById('typeChart').getContext('2d');
-        if (typeChartInstance) typeChartInstance.destroy();
+    const PALETTE = [
+        '#2563eb', '#059669', '#d97706', '#7c3aed', 
+        '#0891b2', '#c2410c', '#65a30d', '#db2777', '#94a3b8'
+    ];
 
-        typeChartInstance = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: Object.keys(typeCounts),
-                datasets: [{
-                    data: Object.values(typeCounts),
-                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#94a3b8'],
-                    hoverOffset: 10,
-                    borderWidth: 3, 
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: { 
-                responsive: true, maintainAspectRatio: false, cutout: '70%',
-                plugins: { legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, pointStyle: 'circle', font: { weight: 500 } } } },
-                layout: { padding: 10 }
-            }
-        });
-    }
-
-    function drawPriceDistChart(priceRanges) {
-        const ctx = document.getElementById('priceDistChart').getContext('2d');
-        if (priceDistChartInstance) priceDistChartInstance.destroy();
-
-        priceDistChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: Object.keys(priceRanges),
-                datasets: [{
-                    label: 'Count',
-                    data: Object.values(priceRanges),
-                    backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'],
-                    borderRadius: 8,
-                    barPercentage: 0.5
-                }]
-            },
-            options: { 
-                responsive: true, maintainAspectRatio: false, 
-                plugins: { legend: { display: false } },
-                scales: {
-                    x: { grid: { display: false }, ticks: { font: { weight: 500 } }, border: {display: false} },
-                    y: { border: { display: false, dash: [5, 5] }, beginAtZero: true }
+    const ctx = document.getElementById('typeChart').getContext('2d');
+    charts.type = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data: vals,
+                backgroundColor: PALETTE.slice(0, labels.length).map(c => c + '30'),
+                borderColor: PALETTE.slice(0, labels.length),
+                borderWidth: 2,
+                hoverOffset: 10,
+                hoverBorderWidth: 2.5
+            }]
+        },
+        options: {
+            responsive: true, 
+            maintainAspectRatio: false, 
+            cutout: '62%',
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 12, 
+                        usePointStyle: true, 
+                        pointStyle: 'circle',
+                        color: '#4a5168', 
+                        font: { size: 11 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+                            const pct = ((ctx.parsed / total)*100).toFixed(1);
+                            return `  ${ctx.label}: ${ctx.parsed.toLocaleString()} (${pct}%)`;
+                        }
+                    }
                 }
             }
-        });
-    }
+        }
+    });
+}
 
-    function drawBedsChart(bedsCounts) {
-        const ctx = document.getElementById('bedsChart').getContext('2d');
-        if (bedsChartInstance) bedsChartInstance.destroy();
-
-        bedsChartInstance = new Chart(ctx, {
-            type: 'polarArea', // Polar Area chart gives a very professional analytical look
-            data: {
-                labels: Object.keys(bedsCounts),
-                datasets: [{
-                    data: Object.values(bedsCounts),
-                    backgroundColor: [
-                        'rgba(59, 130, 246, 0.7)', 
-                        'rgba(16, 185, 129, 0.7)', 
-                        'rgba(245, 158, 11, 0.7)', 
-                        'rgba(139, 92, 246, 0.7)', 
-                        'rgba(100, 116, 139, 0.7)'
-                    ],
-                    borderWidth: 2, 
-                    borderColor: '#ffffff'
-                }]
-            },
-            options: { 
-                responsive: true, maintainAspectRatio: false, 
-                plugins: { legend: { position: 'bottom', labels: { padding: 20, usePointStyle: true, font: { weight: 500 } } } },
-                scales: { r: { ticks: { display: false }, grid: { color: 'rgba(0,0,0,0.05)' } } }
+function drawBeds(bDist) {
+    destroyChart('beds');
+    const ctx = document.getElementById('bedsChart').getContext('2d');
+    const C = ['#2563eb','#059669','#d97706','#7c3aed','#94a3b8'];
+    charts.beds = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: Object.keys(bDist),
+            datasets: [{
+                data: Object.values(bDist),
+                backgroundColor: C.map(c=>c+'25'),
+                borderColor: C,
+                borderWidth: 2,
+                hoverOffset: 8
+            }]
+        },
+        options: {
+            responsive:true, 
+            maintainAspectRatio:false, 
+            cutout:'62%',
+            plugins:{
+                legend:{position:'bottom', labels:{padding:14, usePointStyle:true, pointStyle:'circle', color:'#4a5168', font:{size:12}}},
+                tooltip:{callbacks:{label:c=>' '+c.label+': '+c.parsed.toLocaleString()}}
             }
-        });
-    }
+        }
+    });
+}
 </script>
-
 </body>
 </html>
