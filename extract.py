@@ -6,25 +6,63 @@ import pandas as pd
 import re
 from bs4 import BeautifulSoup
 from curl_cffi import requests 
+import numpy as np
 
 print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE) 🚀")
 
 FILE_NAME = 'data/melbourne_full_hybrid_data.csv'
-GRID_SIZE = 12  
+GRID_SIZE = 14  
 
 # ==========================================
 # 1. HELPER FUNCTIONS
 # ==========================================
-def extract_numeric_price(price_str):
-    if not price_str or "contact" in price_str.lower() or "auction" in price_str.lower():
-        return None
-    numbers = re.findall(r'\d+', str(price_str).replace(',', '').replace('.', ''))
-    numbers = [float(n) for n in numbers if len(n) >= 4]
-    if len(numbers) >= 2:
-        return (numbers[0] + numbers[1]) / 2 
-    elif len(numbers) == 1:
-        return numbers[0]
-    return None
+def parse_raw_price(raw_price):
+    """
+    Parses the Raw_Price string to extract a numeric price.
+    Handles ranges by taking the average, single values directly.
+    Supports 'M' for millions (e.g., 7M = 7000000, 7.7M = 7700000).
+    Ignores non-price text and returns NaN if no valid price found or no $ sign.
+    """
+    if not isinstance(raw_price, str) or not raw_price.strip():
+        return np.nan
+    
+    # Normalize the string: remove commas, replace en-dash with hyphen, lowercase
+    normalized = raw_price.replace(',', '').replace('–', '-').lower().strip()
+    
+    # Check if there's a $ sign; if not, it's not money
+    if '$' not in normalized:
+        return np.nan
+    
+    # Handle 'M' or 'm' for millions, including decimals (e.g., 7.7m -> 7700000)
+    normalized = re.sub(r'(\d+\.?\d*|\.\d+)m', lambda m: str(float(m.group(1)) * 1000000), normalized)
+    
+    # Handle 'k' or 'K' for thousands, including decimals (e.g., 25k -> 25000)
+    normalized = re.sub(r'(\d+\.?\d*|\.\d+)k', lambda m: str(float(m.group(1)) * 1000), normalized)
+    
+    # Extract range: $123456 - $789101 or similar (optional $)
+    range_match = re.search(r'[\$]?(\d+\.?\d*)\s*-\s*[\$]?(\d+\.?\d*)', normalized)
+    if range_match:
+        try:
+            low = float(range_match.group(1))
+            high = float(range_match.group(2))
+            if low < high:
+                return (low + high) / 2
+            else:
+                # Likely a discount or non-range, take the first (larger) value
+                return low
+        except ValueError:
+            pass
+    
+    # Extract single value: $123456 or similar
+    single_match = re.search(r'[\$]?(\d+\.?\d*)', normalized)
+    if single_match:
+        try:
+            return float(single_match.group(1))
+        except ValueError:
+            pass
+    
+    # If no match, return NaN
+    return np.nan
 
 def human_delay(min_sec=1.0, max_sec=2.5):
     time.sleep(random.uniform(min_sec, max_sec))
@@ -141,7 +179,7 @@ try:
                                     'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
                                     'Land_Size_sqm': f.get('landSize', 0),
                                     'Raw_Price': raw_price,
-                                    'Numeric_Price': extract_numeric_price(raw_price),
+                                    'Numeric_Price': parse_raw_price(raw_price),
                                     'Latitude': a.get('lat', m.get('geolocation', {}).get('latitude')),
                                     'Longitude': a.get('lng', m.get('geolocation', {}).get('longitude')),
                                     'URL': f"https://www.domain.com.au{url_path}" if url_path else "N/A",
