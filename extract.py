@@ -4,7 +4,7 @@ import time
 import random
 import pandas as pd
 import re
-import math # Đã thêm math cho công thức Haversine
+import math 
 from bs4 import BeautifulSoup
 from curl_cffi import requests 
 import numpy as np
@@ -12,7 +12,7 @@ import numpy as np
 print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE WITH DEEP EXTRACT & CBD DIST) 🚀")
 
 FILE_NAME = 'data/melbourne_full_hybrid_data.csv'
-GRID_SIZE = 14  
+GRID_SIZE = 11
 
 # ==========================================
 # 1. HELPER FUNCTIONS
