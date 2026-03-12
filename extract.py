@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests 
 import numpy as np
 
-print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE) 🚀")
+print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE WITH DEEP EXTRACT) 🚀")
 
 FILE_NAME = 'data/melbourne_full_hybrid_data.csv'
 GRID_SIZE = 14  
@@ -63,6 +63,97 @@ def parse_raw_price(raw_price):
     
     # If no match, return NaN
     return np.nan
+
+def extract_numeric(text):
+    if pd.isna(text) or not str(text).strip(): return np.nan
+    numbers = re.findall(r'\d+', str(text).replace(',', '').replace('.', ''))
+    return float(numbers[0]) if numbers else np.nan
+
+def get_deep_property_data(property_url, session_obj):
+    """
+    Vào trang chi tiết để lấy thông tin Features, Demographics, Street Profile.
+    Được gọi bên trong vòng lặp chính.
+    """
+    details = {
+        'Year_Built': np.nan, 'Building_Size_sqm': np.nan, 'Is_New_Construction': 0,
+        'Days_on_Market': np.nan,
+        'Has_Ensuite': 0, 'Has_Dishwasher': 0, 'Has_Floorboards': 0,
+        'Has_Ducted_Heating': 0, 'Has_Ducted_Cooling': 0, 'Has_Secure_Parking': 0,
+        'Has_Courtyard': 0, 'Has_Balcony': 0,
+        'Neighbour_Age_Under20_Pct': np.nan, 'Neighbour_Age_20_39_Pct': np.nan,
+        'Neighbour_Age_40_59_Pct': np.nan, 'Neighbour_Age_60Plus_Pct': np.nan,
+        'Neighbour_LongTermRes_Pct': np.nan, 'Neighbour_Owner_Pct': np.nan, 'Neighbour_Renter_Pct': np.nan,
+        'Neighbour_Family_Pct': np.nan, 'Neighbour_Single_Pct': np.nan,
+        'Street_Total_Properties': np.nan, 'Street_Recently_Sold': np.nan,
+        'Street_Owner_Pct': np.nan, 'Street_Renter_Pct': np.nan
+    }
+    
+    if not property_url or property_url == "N/A":
+        return details
+        
+    try:
+        response = session_obj.get(property_url, timeout=15)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        script_tag = soup.find('script', id='__NEXT_DATA__')
+        
+        if script_tag:
+            data = json.loads(script_tag.string)
+            listing_data = data['props']['pageProps']['componentProps'].get('listing', {})
+            
+            # 1. Basic Details
+            details['Is_New_Construction'] = 1 if listing_data.get('isNewDevelopment') else 0
+            
+            listed_date_str = listing_data.get('dateListed')
+            if listed_date_str:
+                try:
+                    listed = pd.to_datetime(listed_date_str).tz_localize(None)
+                    details['Days_on_Market'] = (pd.Timestamp.now() - listed).days
+                except: pass
+            
+            property_details = listing_data.get('propertyDetails', [])
+            for item in property_details:
+                label = str(item.get('label', '')).lower()
+                val = item.get('value')
+                if 'year built' in label: details['Year_Built'] = extract_numeric(val)
+                elif 'building size' in label: details['Building_Size_sqm'] = extract_numeric(val)
+
+            # 2. Features (One-Hot)
+            features = listing_data.get('features', [])
+            f_str = " ".join(features).lower()
+            if 'ensuite' in f_str: details['Has_Ensuite'] = 1
+            if 'dishwasher' in f_str: details['Has_Dishwasher'] = 1
+            if 'floorboards' in f_str: details['Has_Floorboards'] = 1
+            if 'ducted heating' in f_str: details['Has_Ducted_Heating'] = 1
+            if 'ducted cooling' in f_str or 'airconditioning' in f_str: details['Has_Ducted_Cooling'] = 1
+            if 'secure parking' in f_str: details['Has_Secure_Parking'] = 1
+            if 'courtyard' in f_str: details['Has_Courtyard'] = 1
+            if 'balcony' in f_str or 'deck' in f_str: details['Has_Balcony'] = 1
+
+            # 3. Demographics & Street
+            insights = listing_data.get('insights', {})
+            demographics = insights.get('demographics', {})
+            if demographics:
+                details['Neighbour_Age_Under20_Pct'] = extract_numeric(demographics.get('ageUnder20'))
+                details['Neighbour_Age_20_39_Pct'] = extract_numeric(demographics.get('age20To39'))
+                details['Neighbour_Age_40_59_Pct'] = extract_numeric(demographics.get('age40To59'))
+                details['Neighbour_Age_60Plus_Pct'] = extract_numeric(demographics.get('age60Plus'))
+                details['Neighbour_LongTermRes_Pct'] = extract_numeric(demographics.get('longTermResidents'))
+                details['Neighbour_Owner_Pct'] = extract_numeric(demographics.get('ownerOccupier'))
+                details['Neighbour_Renter_Pct'] = extract_numeric(demographics.get('renter'))
+                details['Neighbour_Family_Pct'] = extract_numeric(demographics.get('family'))
+                details['Neighbour_Single_Pct'] = extract_numeric(demographics.get('single'))
+
+            street_profile = insights.get('streetProfile', {})
+            if street_profile:
+                details['Street_Total_Properties'] = extract_numeric(street_profile.get('totalProperties'))
+                details['Street_Recently_Sold'] = extract_numeric(street_profile.get('recentlySold'))
+                details['Street_Owner_Pct'] = extract_numeric(street_profile.get('ownerOccupier'))
+                details['Street_Renter_Pct'] = extract_numeric(street_profile.get('renter'))
+
+    except Exception:
+        pass # Silently fail on individual properties to keep the main loop running
+        
+    return details
 
 def human_delay(min_sec=1.0, max_sec=2.5):
     time.sleep(random.uniform(min_sec, max_sec))
@@ -166,9 +257,11 @@ try:
                             url_path = m.get('url', '')
                             
                             full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
+                            property_full_url = f"https://www.domain.com.au{url_path}" if url_path else "N/A"
 
                             if full_address:
-                                daily_scraped_data.append({
+                                # TRÍCH XUẤT CƠ BẢN (Code gốc của bạn)
+                                base_record = {
                                     'Property_ID': pid_str,
                                     'Full_Address': full_address,
                                     'Suburb': suburb,
@@ -182,9 +275,18 @@ try:
                                     'Numeric_Price': parse_raw_price(raw_price),
                                     'Latitude': a.get('lat', m.get('geolocation', {}).get('latitude')),
                                     'Longitude': a.get('lng', m.get('geolocation', {}).get('longitude')),
-                                    'URL': f"https://www.domain.com.au{url_path}" if url_path else "N/A",
+                                    'URL': property_full_url,
                                     'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d')
-                                })
+                                }
+                                
+                                # TRÍCH XUẤT SÂU (Bổ sung an toàn)
+                                if property_full_url != "N/A":
+                                    print(f"      -> Khai thác sâu: {pid_str}")
+                                    human_delay(1.5, 3.0) # Nghỉ để tránh block khi vào trang con
+                                    deep_data = get_deep_property_data(property_full_url, session)
+                                    base_record.update(deep_data) # Gộp dữ liệu mới vào record cũ
+                                
+                                daily_scraped_data.append(base_record)
                                 seen_ids.add(pid_str)
 
         if block_counter >= 3:
