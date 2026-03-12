@@ -4,11 +4,12 @@ import time
 import random
 import pandas as pd
 import re
+import math # Đã thêm math cho công thức Haversine
 from bs4 import BeautifulSoup
 from curl_cffi import requests 
 import numpy as np
 
-print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE WITH DEEP EXTRACT) 🚀")
+print("🚀 STARTING CLOUDFLARE-BYPASS SCRAPER (CURL_CFFI MODE WITH DEEP EXTRACT & CBD DIST) 🚀")
 
 FILE_NAME = 'data/melbourne_full_hybrid_data.csv'
 GRID_SIZE = 14  
@@ -69,9 +70,38 @@ def extract_numeric(text):
     numbers = re.findall(r'\d+', str(text).replace(',', '').replace('.', ''))
     return float(numbers[0]) if numbers else np.nan
 
+def calculate_distance_to_cbd(lat2, lon2):
+    """
+    Tính khoảng cách (tính bằng km) từ một tọa độ đến Melbourne CBD sử dụng công thức Haversine.
+    Tọa độ Melbourne CBD: -37.8136, 144.9631
+    """
+    if pd.isna(lat2) or pd.isna(lon2):
+        return np.nan
+        
+    lat1 = -37.8136
+    lon1 = 144.9631
+    R = 6371.0 # Bán kính Trái Đất tính bằng km
+
+    # Chuyển đổi tọa độ từ độ sang radian
+    lat1_rad = math.radians(lat1)
+    lon1_rad = math.radians(lon1)
+    lat2_rad = math.radians(lat2)
+    lon2_rad = math.radians(lon2)
+
+    # Sự khác biệt về tọa độ
+    dlon = lon2_rad - lon1_rad
+    dlat = lat2_rad - lat1_rad
+
+    # Công thức Haversine
+    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    
+    distance = R * c
+    return round(distance, 2)
+
 def get_deep_property_data(property_url, session_obj):
     """
-    Vào trang chi tiết để lấy thông tin Features, Demographics, Street Profile.
+    Vào trang chi tiết để lấy thông vị trí, Features, Demographics, Street Profile.
     Được gọi bên trong vòng lặp chính.
     """
     details = {
@@ -256,11 +286,15 @@ try:
                             raw_price = m.get('price', 'N/A')
                             url_path = m.get('url', '')
                             
+                            # Lấy tọa độ
+                            lat = a.get('lat', m.get('geolocation', {}).get('latitude'))
+                            lng = a.get('lng', m.get('geolocation', {}).get('longitude'))
+                            
                             full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
                             property_full_url = f"https://www.domain.com.au{url_path}" if url_path else "N/A"
 
                             if full_address:
-                                # TRÍCH XUẤT CƠ BẢN (Code gốc của bạn)
+                                # TRÍCH XUẤT CƠ BẢN
                                 base_record = {
                                     'Property_ID': pid_str,
                                     'Full_Address': full_address,
@@ -273,18 +307,19 @@ try:
                                     'Land_Size_sqm': f.get('landSize', 0),
                                     'Raw_Price': raw_price,
                                     'Numeric_Price': parse_raw_price(raw_price),
-                                    'Latitude': a.get('lat', m.get('geolocation', {}).get('latitude')),
-                                    'Longitude': a.get('lng', m.get('geolocation', {}).get('longitude')),
+                                    'Latitude': lat,
+                                    'Longitude': lng,
+                                    'Distance_to_CBD_km': calculate_distance_to_cbd(lat, lng), # <-- GỌI HÀM TẠI ĐÂY
                                     'URL': property_full_url,
                                     'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d')
                                 }
                                 
-                                # TRÍCH XUẤT SÂU (Bổ sung an toàn)
+                                # TRÍCH XUẤT SÂU
                                 if property_full_url != "N/A":
                                     print(f"      -> Khai thác sâu: {pid_str}")
-                                    human_delay(1.5, 3.0) # Nghỉ để tránh block khi vào trang con
+                                    human_delay(1.5, 3.0) 
                                     deep_data = get_deep_property_data(property_full_url, session)
-                                    base_record.update(deep_data) # Gộp dữ liệu mới vào record cũ
+                                    base_record.update(deep_data) 
                                 
                                 daily_scraped_data.append(base_record)
                                 seen_ids.add(pid_str)
