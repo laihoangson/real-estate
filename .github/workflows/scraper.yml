@@ -34,7 +34,7 @@ jobs:
 
     - name: Run scraper
       run: |
-        python extract.py
+        python extract_house_price.py
 
     - name: Commit updated dataset
       run: |
