@@ -181,24 +181,19 @@ try:
                                 
                                 if not date_val: date_val = 'N/A'
                                 
-                                # 2. PHÂN LOẠI METHOD CHI TIẾT
+                                # 2. PHÂN LOẠI METHOD CHI TIẾT (CHỈ GIỮ AUCTION VÀ PRIVATE TREATY)
                                 tags = [str(t).lower() for t in m.get('tags', [])]
                                 status_type = str(m.get('status', {}).get('type', '')).lower()
                                 combined_text = (raw_price + " " + " ".join(tags) + " " + status_type).lower()
                                 
                                 method = "N/A"
-                                if status_label == 'Sold':
-                                    method = "S"
-                                    if 'prior' in combined_text: method = "SP"
-                                    elif 'after' in combined_text: method = "SA"
-                                    elif 'passed in' in combined_text: method = "PI"
-                                    elif 'withdrawn' in combined_text: method = "W"
-                                    elif 'not disclosed' in combined_text or 'contact agent' in combined_text:
-                                        method = "PN" if 'prior' in combined_text else "SN"
+                                if 'auction' in combined_text: 
+                                    method = "Auction"
+                                elif 'private treaty' in combined_text or 'sale' in combined_text or 'sold' in combined_text or 'under offer' in combined_text:
+                                    method = "Private Treaty"
                                 else:
-                                    if 'auction' in combined_text: method = "Auction"
-                                    elif 'under offer' in combined_text: method = "Under Offer"
-                                    elif 'private treaty' in combined_text: method = "Private Treaty"
+                                    # Fallback to Private Treaty as the default for non-auctions in Australia
+                                    method = "Private Treaty"
 
                                 if full_address:
                                     record = {
