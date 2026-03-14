@@ -11,7 +11,7 @@ import numpy as np
 
 print("🚀 STARTING FAST SCRAPER 🚀")
 
-FILE_NAME = 'data/raw/melbourne_full_hybrid_data.csv'
+FILE_NAME = 'data/melbourne_price_data.csv'
 GRID_SIZE = 14  
 
 # ==========================================
