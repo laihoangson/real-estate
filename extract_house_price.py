@@ -22,8 +22,10 @@ def parse_raw_price(raw_price):
         return np.nan
     normalized = raw_price.replace(',', '').replace('–', '-').lower().strip()
     if '$' not in normalized: return np.nan
-    normalized = re.sub(r'(\d+\.?\d*|\.\d+)m', lambda m: str(float(m.group(1)) * 1000000), normalized)
-    normalized = re.sub(r'(\d+\.?\d*|\.\d+)k', lambda m: str(float(m.group(1)) * 1000), normalized)
+    
+    # SMART MULTIPLIERS: Ignore 'k' or 'm' if the agent already typed out the full number
+    normalized = re.sub(r'(\d+\.?\d*|\.\d+)\s*m\b', lambda m: str(float(m.group(1)) * 1000000 if float(m.group(1)) < 1000 else float(m.group(1))), normalized)
+    normalized = re.sub(r'(\d+\.?\d*|\.\d+)\s*k\b', lambda m: str(float(m.group(1)) * 1000 if float(m.group(1)) < 1000 else float(m.group(1))), normalized)
     
     range_match = re.search(r'[\$]?(\d+\.?\d*)\s*-\s*[\$]?(\d+\.?\d*)', normalized)
     if range_match:
@@ -32,10 +34,13 @@ def parse_raw_price(raw_price):
             return (low + high) / 2 if low < high else low
         except ValueError: pass
     
-    single_match = re.search(r'[\$]?(\d+\.?\d*)', normalized)
-    if single_match:
-        try: return float(single_match.group(1))
-        except ValueError: pass
+    # FOR FHOG OR MULTIPLE PRICES: Extract all valid numbers and take the max
+    numbers = [float(x) for x in re.findall(r'\d+\.?\d*', normalized)]
+    valid_prices = [n for n in numbers if n >= 50000] # Real estate is always > 50k
+    
+    if valid_prices:
+        return max(valid_prices) # 575k > 565k, returns true un-subsidized price
+        
     return np.nan
 
 def calculate_distance_to_cbd(lat2, lon2):
