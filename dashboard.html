@@ -10,90 +10,47 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         :root {
-            --bg: #f4f6fb;
-            --surface: #ffffff;
-            --surface2: #f0f2f8;
-            --border: rgba(0,0,0,0.07);
-            --border-hover: rgba(0,0,0,0.14);
-            --text: #1a1d27;
-            --text-muted: #7c8499;
-            --text-dim: #4a5168;
-            --accent: #2563eb;
-            --accent2: #f5f6f9;
-            --accent-light: rgba(37,99,235,0.08);
-            --emerald: #059669;
-            --emerald-light: rgba(5,150,105,0.08);
-            --amber: #d97706;
-            --rose: #e11d48;
-            --violet: #7c3aed;
+            --bg: #f4f6fb; --surface: #ffffff; --surface2: #f0f2f8;
+            --border: rgba(0,0,0,0.07); --border-hover: rgba(0,0,0,0.14);
+            --text: #1a1d27; --text-muted: #7c8499; --text-dim: #4a5168;
+            --accent: #2563eb; --accent2: #f5f6f9; --accent-light: rgba(37,99,235,0.08);
+            --emerald: #059669; --emerald-light: rgba(5,150,105,0.08);
+            --amber: #d97706; --rose: #e11d48; --violet: #7c3aed;
             --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
             --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
             /* range colors */
-            --c0: #059669;
-            --c1: #2563eb;
-            --c2: #d97706;
-            --c3: #e11d48;
-            --cw: #94a3b8;
+            --c0: #059669; --c1: #2563eb; --c2: #d97706; --c3: #e11d48; --cw: #94a3b8;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; overflow-x: hidden; }
 
         /* ── HEADER ── */
-        .header {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 32px 0 28px;
-            position: relative;
-            overflow: hidden;
-        }
-        .header::before {
-            content: '';
-            position: absolute;
-            top: -60px; right: -60px;
-            width: 320px; height: 320px;
-            background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%);
-            pointer-events: none;
-        }
-        .header-inner {
-            max-width: 1440px; margin: 0 auto; padding: 0 40px;
-            display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px;
-        }
-        .header-eyebrow {
-            font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase;
-            color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;
-        }
+        .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 32px 0 28px; position: relative; overflow: hidden; }
+        .header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%); pointer-events: none; }
+        .header-inner { max-width: 1440px; margin: 0 auto; padding: 0 40px; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+        .header-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
         .header-eyebrow::before { content: ''; display: block; width: 18px; height: 2px; background: var(--accent); border-radius: 2px; }
         .header-title { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 3vw, 2.8rem); line-height: 1.1; color: var(--text); font-weight: 400; }
         .header-title em { font-style: italic; color: var(--accent); }
         .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .live-badge {
-            display: flex; align-items: center; gap: 7px;
-            background: var(--emerald-light); border: 1px solid rgba(5,150,105,0.18);
-            color: var(--emerald); padding: 6px 13px; border-radius: 100px; font-size: 11.5px; font-weight: 600;
-        }
+        .live-badge { display: flex; align-items: center; gap: 7px; background: var(--emerald-light); border: 1px solid rgba(5,150,105,0.18); color: var(--emerald); padding: 6px 13px; border-radius: 100px; font-size: 11.5px; font-weight: 600; }
         .live-dot { width: 6px; height: 6px; background: var(--emerald); border-radius: 50%; animation: livePulse 2s infinite; }
         @keyframes livePulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
-        .result-chip {
-            display: inline-flex; align-items: center; gap: 6px;
-            background: var(--accent-light); border: 1px solid rgba(37,99,235,0.2);
-            color: var(--accent); padding: 6px 13px; border-radius: 100px; font-size: 12px; font-weight: 600;
-        }
+        .result-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-light); border: 1px solid rgba(37,99,235,0.2); color: var(--accent); padding: 6px 13px; border-radius: 100px; font-size: 12px; font-weight: 600; }
 
         /* ── MAIN ── */
         .main { max-width: 1440px; margin: 0 auto; padding: 28px 40px 60px; }
 
+        /* ── TABS ── */
+        .status-tabs { display: flex; gap: 10px; margin-bottom: 22px; }
+        .tab-btn { padding: 10px 24px; font-size: 13.5px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; color: var(--text-muted); cursor: pointer; transition: all 0.2s ease; box-shadow: var(--shadow-sm); }
+        .tab-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
+
         /* ── STATS ── */
         .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
-        .stat-card {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-            padding: 22px 22px 18px; position: relative; overflow: hidden;
-            transition: border-color .2s, box-shadow .2s, transform .2s;
-            box-shadow: var(--shadow-sm); animation: fadeUp .4s ease both;
-        }
-        .stat-card::after {
-            content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px;
-            background: var(--bar-color, transparent); opacity: 0.7;
-        }
+        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 22px 18px; position: relative; overflow: hidden; transition: border-color .2s, box-shadow .2s, transform .2s; box-shadow: var(--shadow-sm); animation: fadeUp .4s ease both; }
+        .stat-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--bar-color, transparent); opacity: 0.7; }
         .stat-card:nth-child(1){animation-delay:.05s;--bar-color:var(--accent);}
         .stat-card:nth-child(2){animation-delay:.1s;--bar-color:var(--emerald);}
         .stat-card:nth-child(3){animation-delay:.15s;--bar-color:var(--amber);}
@@ -108,90 +65,44 @@
         .stat-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; }
 
         /* ── FILTER BAR ── */
-        .filter-bar {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-            padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap;
-            box-shadow: var(--shadow-sm);
-        }
+        .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap; box-shadow: var(--shadow-sm); }
         .filter-group { display: flex; flex-direction: column; gap: 9px; }
         .filter-label { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
 
-        /* Suburb search */
         .suburb-wrap { position: relative; min-width: 230px; }
-        .suburb-input-row {
-            display: flex; align-items: center; background: var(--surface2); border: 1.5px solid var(--border);
-            border-radius: 10px; padding: 0 12px; gap: 8px; transition: border-color .2s, box-shadow .2s;
-        }
+        .suburb-input-row { display: flex; align-items: center; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; gap: 8px; transition: border-color .2s, box-shadow .2s; }
         .suburb-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
         .suburb-icon { color: var(--text-muted); font-size: 15px; flex-shrink: 0; }
-        .suburb-input-row input {
-            background: none; border: none; color: var(--text); font-family: 'DM Sans', sans-serif;
-            font-size: 13.5px; padding: 9px 0; outline: none; width: 100%;
-        }
+        .suburb-input-row input { background: none; border: none; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13.5px; padding: 9px 0; outline: none; width: 100%; }
         .suburb-input-row input::placeholder { color: var(--text-muted); }
         .suburb-clear { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 17px; padding: 0; display: none; line-height: 1; }
         .suburb-clear.show { display: block; }
-        .suburb-dropdown {
-            position: absolute; top: calc(100% + 6px); left: 0; right: 0;
-            background: var(--surface); border: 1px solid var(--border-hover); border-radius: 10px;
-            max-height: 220px; overflow-y: auto; z-index: 9000; display: none;
-            box-shadow: 0 16px 40px rgba(0,0,0,0.13);
-        }
+        .suburb-dropdown { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border-hover); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9000; display: none; box-shadow: 0 16px 40px rgba(0,0,0,0.13); }
         .suburb-dropdown.open { display: block; }
         .suburb-opt { padding: 9px 14px; font-size: 13px; cursor: pointer; transition: background .1s; color: var(--text-dim); }
         .suburb-opt:hover { background: var(--accent-light); color: var(--accent); }
         .suburb-opt.selected { color: var(--accent); font-weight: 600; }
         .suburb-opt.no-results { color: var(--text-muted); cursor: default; font-style: italic; }
-        .suburb-dropdown::-webkit-scrollbar { width: 3px; }
-        .suburb-dropdown::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
 
-        /* ── PRICE RANGE INPUTS ── */
         .price-range-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .price-input-box {
-            display: flex; align-items: center; gap: 6px;
-            background: var(--surface2); border: 1.5px solid var(--border);
-            border-radius: 10px; padding: 0 12px; transition: border-color .2s, box-shadow .2s;
-        }
+        .price-input-box { display: flex; align-items: center; gap: 6px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; transition: border-color .2s, box-shadow .2s; }
         .price-input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
         .price-input-box span { font-size: 12px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
-        .price-input-box input {
-            background: none; border: none; outline: none; width: 90px;
-            font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); padding: 9px 0;
-        }
+        .price-input-box input { background: none; border: none; outline: none; width: 90px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); padding: 9px 0; }
         .price-input-box input::placeholder { color: var(--text-muted); }
         .price-sep { color: var(--text-muted); font-size: 13px; font-weight: 500; flex-shrink: 0; }
-        .price-clear-btn {
-            background: none; border: 1.5px solid var(--border); border-radius: 8px;
-            padding: 6px 10px; font-size: 11px; color: var(--text-muted); cursor: pointer;
-            font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all .15s; white-space: nowrap;
-        }
+        .price-clear-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 11px; color: var(--text-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all .15s; white-space: nowrap; }
         .price-clear-btn:hover { border-color: var(--border-hover); color: var(--accent); }
 
-        /* Withheld checkbox */
-        .withheld-check {
-            display: flex; align-items: center; gap: 8px; cursor: pointer;
-            user-select: none; font-size: 12.5px; color: var(--text-dim); font-weight: 500;
-            padding: 4px 0;
-        }
+        .withheld-check { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--text-dim); font-weight: 500; padding: 4px 0; }
         .withheld-check input { display: none; }
-        .wcheck-box {
-            width: 17px; height: 17px; border-radius: 4px; border: 1.5px solid var(--border-hover);
-            background: var(--surface2); display: flex; align-items: center; justify-content: center;
-            flex-shrink: 0; transition: all .15s;
-        }
-        .withheld-check input:checked + .wcheck-box {
-            background: #64748b; border-color: #64748b;
-        }
+        .wcheck-box { width: 17px; height: 17px; border-radius: 4px; border: 1.5px solid var(--border-hover); background: var(--surface2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
+        .withheld-check input:checked + .wcheck-box { background: #64748b; border-color: #64748b; }
         .withheld-check input:checked + .wcheck-box svg { opacity: 1; }
         .wcheck-box svg { opacity: 0; transition: opacity .15s; }
 
-        /* Type pills */
         .type-pills { display: flex; gap: 7px; flex-wrap: wrap; }
-        .type-pill {
-            padding: 6px 13px; background: var(--surface2); border: 1.5px solid var(--border);
-            border-radius: 100px; cursor: pointer; user-select: none; font-size: 12.5px;
-            color: var(--text-muted); font-weight: 500; transition: all .18s;
-        }
+        .type-pill { padding: 6px 13px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 100px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--text-muted); font-weight: 500; transition: all .18s; }
         .type-pill:hover { border-color: var(--border-hover); color: var(--text); }
         .type-pill.on { background: var(--accent-light); border-color: rgba(37,99,235,0.3); color: var(--accent); font-weight: 600; }
 
@@ -199,15 +110,8 @@
         .content-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-bottom: 18px; }
         .charts-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; }
 
-        /* ── PANELS ── */
-        .panel {
-            background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-            overflow: hidden; box-shadow: var(--shadow-sm); animation: fadeUp .45s ease .1s both;
-        }
-        .panel-head {
-            padding: 15px 20px; border-bottom: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: space-between;
-        }
+        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm); animation: fadeUp .45s ease .1s both; }
+        .panel-head { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
         .panel-title { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
         .panel-hint { font-size: 11.5px; color: var(--text-muted); }
         .panel-body { padding: 18px 20px; }
@@ -215,64 +119,49 @@
         /* ── MAP ── */
         #map { height: 520px; width: 100%; }
         .leaflet-container { background: #e8edf5 !important; }
-        .leaflet-popup-content-wrapper {
-            background: var(--surface) !important; border: 1px solid var(--border) !important;
-            border-radius: 12px !important; box-shadow: 0 16px 40px rgba(0,0,0,0.14) !important; color: var(--text) !important;
-        }
+        .leaflet-popup-content-wrapper { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; box-shadow: 0 16px 40px rgba(0,0,0,0.14) !important; color: var(--text) !important; }
         .leaflet-popup-tip { background: var(--surface) !important; }
         .leaflet-popup-close-button { color: var(--text-muted) !important; font-size: 18px !important; padding: 8px 10px !important; }
         .leaflet-popup-content { margin: 0 !important; }
-        .popup-body { font-family: 'DM Sans', sans-serif; min-width: 200px; padding: 16px; }
+        
+        .popup-body { font-family: 'DM Sans', sans-serif; min-width: 260px; padding: 16px; }
+        .popup-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .popup-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
+        .badge-sale { background: var(--emerald-light); color: var(--emerald); }
+        .badge-sold { background: rgba(124,58,237,0.1); color: var(--violet); }
+        .popup-date { font-size: 11px; color: var(--text-muted); font-weight: 500; }
         .popup-addr { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 7px; line-height: 1.4; }
         .popup-price { font-family: 'DM Serif Display', serif; font-size: 1.45rem; margin-bottom: 12px; }
         .popup-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
         .spec { background: var(--surface2); border-radius: 7px; padding: 7px 9px; }
-        .spec-l { font-size: 9.5px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
-        .spec-v { font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
-        .popup-btn {
-            display: block; text-align: center; background: var(--accent2); color: #fff;
-            padding: 9px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 12px; transition: opacity .2s;
-        }
-        .popup-btn:hover { opacity: 0.85; }
+        .spec.full { grid-column: span 2; }
+        .spec-l { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+        .spec-v { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+        .popup-btn { display: block; text-align: center; background: var(--accent2); color: var(--accent); padding: 9px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 12px; transition: background .2s; border: 1px solid var(--border); margin-top: 10px;}
+        .popup-btn:hover { background: var(--accent-light); }
 
-        /* Map legend */
-        .mlegend {
-            background: rgba(255,255,255,0.96) !important; border: 1px solid rgba(0,0,0,0.08) !important;
-            border-radius: 11px !important; padding: 13px 16px !important; backdrop-filter: blur(12px);
-            box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
-        }
+        /* Tooltip cho Choropleth */
+        .choro-tooltip { background: rgba(255,255,255,0.96); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'DM Sans', sans-serif; color: var(--text); box-shadow: var(--shadow-sm); }
+        .choro-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: var(--accent); }
+        .choro-stat { font-size: 12px; margin-bottom: 3px; display: flex; justify-content: space-between; gap: 15px;}
+        .choro-stat span { color: var(--text-muted); }
+
+        .mlegend { background: rgba(255,255,255,0.96) !important; border: 1px solid rgba(0,0,0,0.08) !important; border-radius: 11px !important; padding: 13px 16px !important; backdrop-filter: blur(12px); box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important; }
         .mlegend-title { font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 9px; font-family: 'DM Sans', sans-serif; }
         .mlegend-row { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-dim); }
-        .mlegend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+        .mlegend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 
-        /* ── CHART CONTAINERS ── */
         .cw280 { height: 280px; position: relative; }
         .cw420 { height: 420px; position: relative; }
 
-        /* ── TOGGLE BUTTON ── */
         .toggle-btn-group { display: flex; gap: 1px; background: var(--surface2); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
-        .toggle-btn {
-            padding: 5px 14px; font-size: 11px; font-weight: 600; border: none; background: none;
-            border-radius: 6px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif;
-            transition: all .15s; letter-spacing: 0.3px;
-        }
+        .toggle-btn { padding: 5px 14px; font-size: 11px; font-weight: 600; border: none; background: none; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif; transition: all .15s; letter-spacing: 0.3px; }
         .toggle-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
 
-        /* ── FOOTER ── */
-        .footer-note {
-            background: rgba(37,99,235,0.04); border: 1px solid rgba(37,99,235,0.1);
-            border-radius: 12px; padding: 14px 20px; font-size: 12.5px; color: var(--text-muted); line-height: 1.7; margin-top: 14px;
-        }
-        .footer-note strong { color: var(--accent); }
-        .footer-note code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 12px; }
-
-        /* ── ANIMATIONS ── */
         @keyframes fadeUp { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:translateY(0);} }
-
-        /* ── RESPONSIVE ── */
         @media (max-width:1200px) { .content-grid{grid-template-columns:1fr;} .charts-row{grid-template-columns:1fr 1fr;} }
         @media (max-width:768px) { .main,.header-inner{padding-left:20px;padding-right:20px;} .stats-row{grid-template-columns:1fr 1fr;} .charts-row{grid-template-columns:1fr 1fr;} .filter-bar{gap:18px;} }
-        @media (max-width:480px) { .charts-row{grid-template-columns:1fr;} }
+        @media (max-width:480px) { .charts-row{grid-template-columns:1fr;} .status-tabs {flex-direction: column;} }
     </style>
 </head>
 <body>
@@ -291,8 +180,13 @@
 </header>
 
 <main class="main">
+    
+    <div class="status-tabs" id="statusTabs">
+        <button class="tab-btn active" data-status="For Sale">For Sale</button>
+        <button class="tab-btn" data-status="Sold">Sold</button>
+        <button class="tab-btn" data-status="ALL">All Market</button>
+    </div>
 
-    <!-- Stats -->
     <div class="stats-row">
         <div class="stat-card">
             <div class="stat-label">Total Properties</div>
@@ -316,9 +210,7 @@
         </div>
     </div>
 
-    <!-- Filters -->
     <div class="filter-bar">
-        <!-- Suburb -->
         <div class="filter-group">
             <div class="filter-label">Suburb</div>
             <div class="suburb-wrap">
@@ -331,7 +223,6 @@
             </div>
         </div>
 
-        <!-- Price Range -->
         <div class="filter-group">
             <div class="filter-label">Price Range</div>
             <div style="display:flex; flex-direction:column; gap:8px;">
@@ -357,7 +248,6 @@
             </div>
         </div>
 
-        <!-- Property Type -->
         <div class="filter-group">
             <div class="filter-label">Property Type</div>
             <div class="type-pills" id="typePills">
@@ -366,29 +256,25 @@
         </div>
     </div>
 
-    <!-- Map + Suburb Chart -->
     <div class="content-grid">
         <div class="panel">
             <div class="panel-head">
-                <span class="panel-title">Valuation Map</span>
-                <span class="panel-hint">Click any point for details</span>
+                <span class="panel-title" id="mapTitle">Valuation Map</span>
+                <div class="toggle-btn-group">
+                    <button class="toggle-btn active" id="btnMapPoints" onclick="setMapMode('points')">Points</button>
+                    <button class="toggle-btn" id="btnMapChoro" onclick="setMapMode('choropleth')">Suburb Heatmap</button>
+                </div>
             </div>
             <div id="map"></div>
         </div>
 
         <div class="panel">
-            <div class="panel-head">
-                <span class="panel-title">Top 10 by Volume</span>
-            </div>
-            <div class="panel-body">
-                <div class="cw420"><canvas id="suburbChart"></canvas></div>
-            </div>
+            <div class="panel-head"><span class="panel-title">Top 10 by Volume</span></div>
+            <div class="panel-body"><div class="cw420"><canvas id="suburbChart"></canvas></div></div>
         </div>
     </div>
 
-    <!-- Bottom Charts -->
     <div class="charts-row">
-        <!-- Suburb Avg Price toggle chart -->
         <div class="panel">
             <div class="panel-head">
                 <span class="panel-title">Suburbs by Avg Price</span>
@@ -400,19 +286,16 @@
             <div class="panel-body"><div class="cw280"><canvas id="suburbPriceChart"></canvas></div></div>
         </div>
 
-        <!-- Histogram: Price Distribution -->
         <div class="panel">
             <div class="panel-head"><span class="panel-title">Price Distribution</span></div>
             <div class="panel-body"><div class="cw280"><canvas id="priceChart"></canvas></div></div>
         </div>
 
-        <!-- Property Type -->
         <div class="panel">
             <div class="panel-head"><span class="panel-title">Property Types</span></div>
             <div class="panel-body"><div class="cw280"><canvas id="typeChart"></canvas></div></div>
         </div>
 
-        <!-- Bedrooms -->
         <div class="panel">
             <div class="panel-head"><span class="panel-title">Bedrooms Breakdown</span></div>
             <div class="panel-body"><div class="cw280"><canvas id="bedsChart"></canvas></div></div>
@@ -424,9 +307,10 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-/* ── Chart defaults (light) ── */
+/* ── Chart defaults (Tắt animation để tab chuyển mượt) ── */
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 Chart.defaults.color = '#7c8499';
+Chart.defaults.animation = false; // Tối ưu hiệu năng
 Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255,255,255,0.98)';
 Chart.defaults.plugins.tooltip.borderColor = 'rgba(0,0,0,0.08)';
 Chart.defaults.plugins.tooltip.borderWidth = 1;
@@ -439,11 +323,15 @@ Chart.defaults.plugins.tooltip.bodyFont  = { size: 12 };
 Chart.defaults.plugins.tooltip.displayColors = false;
 
 /* ── STATE ── */
-let allData = [], suburbs = [];
-let selSuburb = 'ALL', activeType = 'ALL';
+let allData = [], suburbs = [], currentFilteredData = [];
+let selSuburb = 'ALL', activeType = 'ALL', activeStatus = 'For Sale';
 let priceMinVal = null, priceMaxVal = null, showWithheld = true;
 let charts = {}, suburbPriceMode = 'highest';
-let cachedSuburbAvg = {};
+let cachedSuburbStats = {};
+
+let mapMode = 'points'; // 'points' | 'choropleth'
+let geojsonData = null;
+let choroLayer = null;
 
 const RANGE_COLORS = { '0':'#059669','1':'#2563eb','2':'#d97706','3':'#e11d48','w':'#94a3b8' };
 
@@ -455,43 +343,70 @@ function priceRange(p) {
     return '3';
 }
 
-/* ── MAP ── */
-const map = L.map('map', { 
-    zoomControl: true, 
-    attributionControl: false,
-    preferCanvas: true 
-}).setView([-37.8136,144.9631],10);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd', maxZoom: 19
-}).addTo(map);
+/* ── FETCH GEOJSON ── */
+fetch('data/melbourne_suburb_boundaries.geojson')
+    .then(r => r.json())
+    .then(data => { geojsonData = data; })
+    .catch(e => console.log('No geojson found, choropleth map will not render.'));
+
+/* ── MAP SETUP ── */
+// Dùng preferCanvas để render >10k điểm siêu mượt mà không cần cluster
+const map = L.map('map', { zoomControl: true, attributionControl: false, preferCanvas: true }).setView([-37.8136,144.9631],10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
 
 function dotRadius(zoom) {
-    if (zoom <= 9) return 3;
-    if (zoom <= 11) return 4;
-    if (zoom <= 13) return 5;
-    if (zoom <= 15) return 6;
-    return 7;
+    if (zoom <= 9) return 3; if (zoom <= 11) return 4; if (zoom <= 13) return 5;
+    if (zoom <= 15) return 6; return 7;
 }
 
 map.on('zoomend', () => {
-    const r = dotRadius(map.getZoom());
-    markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
+    if(mapMode === 'points') {
+        const r = dotRadius(map.getZoom());
+        markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
+    }
 });
 
 const legend = L.control({ position: 'bottomright' });
 legend.onAdd = function() {
     const d = L.DomUtil.create('div','mlegend');
     d.innerHTML = `
-        <div class="mlegend-title">Price Range</div>
+        <div class="mlegend-title">Median Price Range</div>
         <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
         <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
         <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
         <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
-        <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>Withheld</div>`;
+        <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>No Data</div>`;
     return d;
 };
 legend.addTo(map);
+
+/* ── MAP TOGGLE ── */
+window.setMapMode = function(mode) {
+    mapMode = mode;
+    document.getElementById('btnMapPoints').classList.toggle('active', mode==='points');
+    document.getElementById('btnMapChoro').classList.toggle('active', mode==='choropleth');
+    renderMap(currentFilteredData);
+};
+
+/* ── TABS LOGIC ── */
+document.getElementById('statusTabs').addEventListener('click', e => {
+    const btn = e.target.closest('.tab-btn');
+    if (!btn) return;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeStatus = btn.dataset.status;
+    applyFilters();
+});
+
+/* ── DEBOUNCE FUNCTION ── */
+function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
 
 /* ── SUBURB SEARCH ── */
 const subInput = document.getElementById('suburbInput');
@@ -500,55 +415,30 @@ const subClear = document.getElementById('suburbClear');
 const resultChip = document.getElementById('resultChip');
 
 function renderDrop(q) {
-    const list = q.length === 0
-        ? ['All Suburbs', ...suburbs]
-        : ['All Suburbs', ...suburbs.filter(s => s.toLowerCase().includes(q.toLowerCase()))];
-    
+    const list = q.length === 0 ? ['All Suburbs', ...suburbs] : ['All Suburbs', ...suburbs.filter(s => s.toLowerCase().includes(q.toLowerCase()))];
     subDrop.innerHTML = list.slice(0,60).map(s => {
         const v = s === 'All Suburbs' ? 'ALL' : s;
         return `<div class="suburb-opt ${v===selSuburb?'selected':''}" data-v="${v}">${s}</div>`;
     }).join('');
-    
-    if (list.length === 0) {
-        subDrop.innerHTML = '<div class="suburb-opt no-results">No results</div>';
-    }
-    
+    if (list.length === 0) subDrop.innerHTML = '<div class="suburb-opt no-results">No results</div>';
     subDrop.querySelectorAll('.suburb-opt:not(.no-results)').forEach(el => {
-        el.addEventListener('mousedown', e => { 
-            e.preventDefault(); 
-            setSuburb(el.dataset.v); 
-            subDrop.classList.remove('open');
-        });
+        el.addEventListener('mousedown', e => { e.preventDefault(); setSuburb(el.dataset.v); subDrop.classList.remove('open'); });
     });
 }
 
 function setSuburb(v) {
-    selSuburb = v;
-    subInput.value = v === 'ALL' ? '' : v;
-    subClear.classList.toggle('show', v !== 'ALL');
-    
-    // Update result chip
+    selSuburb = v; subInput.value = v === 'ALL' ? '' : v; subClear.classList.toggle('show', v !== 'ALL');
     resultChip.innerHTML = v !== 'ALL' ? `<div class="result-chip">◉ ${v}</div>` : '';
-    
     if (v !== 'ALL' && allData.length) {
         const row = allData.find(r => r.Suburb === v);
-        if (row) map.setView([row.Latitude, row.Longitude], 13);
+        if (row && row.Latitude) map.setView([row.Latitude, row.Longitude], 13);
     }
     applyFilters();
 }
 
-subInput.addEventListener('focus', () => { 
-    renderDrop(subInput.value); 
-    subDrop.classList.add('open'); 
-});
-
-subInput.addEventListener('input', () => { 
-    renderDrop(subInput.value); 
-    subDrop.classList.add('open'); 
-});
-
+subInput.addEventListener('focus', () => { renderDrop(subInput.value); subDrop.classList.add('open'); });
+subInput.addEventListener('input', () => { renderDrop(subInput.value); subDrop.classList.add('open'); });
 subInput.addEventListener('blur',  () => setTimeout(() => subDrop.classList.remove('open'), 160));
-
 subClear.addEventListener('click', () => setSuburb('ALL'));
 
 /* ── PRICE RANGE INPUTS ── */
@@ -562,30 +452,20 @@ function parsePriceInput(v) {
 
 const priceMinEl  = document.getElementById('priceMin');
 const priceMaxEl  = document.getElementById('priceMax');
-const priceClearEl = document.getElementById('priceClearBtn');
-const withheldEl  = document.getElementById('showWithheld');
 
-function onPriceChange() {
+const processPriceFilter = debounce(() => {
     priceMinVal = parsePriceInput(priceMinEl.value);
     priceMaxVal = parsePriceInput(priceMaxEl.value);
     applyFilters();
-}
+}, 250);
 
-priceMinEl.addEventListener('change', onPriceChange);
-priceMaxEl.addEventListener('change', onPriceChange);
-priceMinEl.addEventListener('keydown', e => { if(e.key==='Enter') onPriceChange(); });
-priceMaxEl.addEventListener('keydown', e => { if(e.key==='Enter') onPriceChange(); });
+priceMinEl.addEventListener('input', processPriceFilter);
+priceMaxEl.addEventListener('input', processPriceFilter);
 
-priceClearEl.addEventListener('click', () => {
-    priceMinEl.value = ''; priceMaxEl.value = '';
-    priceMinVal = null; priceMaxVal = null;
-    applyFilters();
+document.getElementById('priceClearBtn').addEventListener('click', () => {
+    priceMinEl.value = ''; priceMaxEl.value = ''; priceMinVal = null; priceMaxVal = null; applyFilters();
 });
-
-withheldEl.addEventListener('change', function() {
-    showWithheld = this.checked;
-    applyFilters();
-});
+document.getElementById('showWithheld').addEventListener('change', function() { showWithheld = this.checked; applyFilters(); });
 
 /* ── TYPE PILLS ── */
 document.getElementById('typePills').addEventListener('click', e => {
@@ -593,8 +473,7 @@ document.getElementById('typePills').addEventListener('click', e => {
     if (!pill) return;
     document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('on'));
     pill.classList.add('on');
-    activeType = pill.dataset.t;
-    applyFilters();
+    activeType = pill.dataset.t; applyFilters();
 });
 
 function buildTypes(data) {
@@ -603,8 +482,7 @@ function buildTypes(data) {
     wrap.innerHTML = '<div class="type-pill on" data-t="ALL">All Types</div>';
     types.forEach(t => {
         const d = document.createElement('div');
-        d.className = 'type-pill'; d.dataset.t = t; d.textContent = t;
-        wrap.appendChild(d);
+        d.className = 'type-pill'; d.dataset.t = t; d.textContent = t; wrap.appendChild(d);
     });
 }
 
@@ -625,111 +503,158 @@ window.onload = () => {
 /* ── FILTERS ── */
 function applyFilters() {
     let data = allData;
+    if (activeStatus !== 'ALL') data = data.filter(r => r.Status === activeStatus);
     if (selSuburb !== 'ALL') data = data.filter(r => r.Suburb === selSuburb);
-
     data = data.filter(r => {
-        const p = r.Numeric_Price;
-        const hasPrice = p && !isNaN(p);
+        const p = r.Numeric_Price; const hasPrice = p && !isNaN(p);
         if (!hasPrice) return showWithheld;
         if (priceMinVal !== null && p < priceMinVal) return false;
         if (priceMaxVal !== null && p > priceMaxVal) return false;
         return true;
     });
-
     if (activeType !== 'ALL') data = data.filter(r => r.Property_Type === activeType);
-    render(data);
+    
+    currentFilteredData = data;
+    calculateStatsAndRenderCharts(data);
+    renderMap(data);
 }
 
-/* ── RENDER ── */
-function render(data) {
+/* ── DATA PROCESSING & CHARTS ── */
+function calculateStatsAndRenderCharts(data) {
     let tPrice=0, nPrice=0;
-    let subCnt={}, subPriceSum={}, subPriceCnt={}, typeCnt={};
-    let bDist={ '1 Bed':0,'2 Beds':0,'3 Beds':0,'4 Beds':0,'5+ Beds':0 };
+    let typeCnt={}; let bDist={'1 Bed':0,'2 Beds':0,'3 Beds':0,'4 Beds':0,'5+ Beds':0};
     let prices = [];
-
-    markerLayer.clearLayers();
-    const r0 = dotRadius(map.getZoom());
+    cachedSuburbStats = {};
 
     data.forEach(row => {
+        const sub = row.Suburb;
+        if(sub) {
+            if(!cachedSuburbStats[sub]) cachedSuburbStats[sub] = { prices: [], count: 0 };
+            cachedSuburbStats[sub].count++;
+        }
+
         const p = row.Numeric_Price;
         if (p && !isNaN(p)) {
             tPrice += p; nPrice++; prices.push(p);
-            if (row.Suburb) {
-                subPriceSum[row.Suburb] = (subPriceSum[row.Suburb]||0) + p;
-                subPriceCnt[row.Suburb] = (subPriceCnt[row.Suburb]||0) + 1;
-            }
+            if(sub) cachedSuburbStats[sub].prices.push(p);
         }
         
         const b = row.Beds;
         if (b && !isNaN(b)) {
-            if (b===1) bDist['1 Bed']++;
-            else if (b===2) bDist['2 Beds']++;
-            else if (b===3) bDist['3 Beds']++;
-            else if (b===4) bDist['4 Beds']++;
-            else bDist['5+ Beds']++;
+            if(b===1) bDist['1 Bed']++; else if(b===2) bDist['2 Beds']++; else if(b===3) bDist['3 Beds']++; else if(b===4) bDist['4 Beds']++; else bDist['5+ Beds']++;
         }
-        
-        if (row.Suburb) subCnt[row.Suburb] = (subCnt[row.Suburb]||0) + 1;
-
-        const t = row.Property_Type || 'Unknown';
-        typeCnt[t] = (typeCnt[t]||0) + 1;
-
-        const color = RANGE_COLORS[priceRange(p)];
-        const popup = `
-<div class="popup-body">
-  <div class="popup-addr">${row.Full_Address || 'Address unavailable'}</div>
-  <div class="popup-price" style="color:${color}">${p ? '$'+p.toLocaleString() : 'Price Withheld'}</div>
-  <div class="popup-specs">
-    <div class="spec"><div class="spec-l">Type</div><div class="spec-v">${row.Property_Type || 'N/A'}</div></div>
-    <div class="spec"><div class="spec-l">Suburb</div><div class="spec-v">${row.Suburb || 'N/A'}</div></div>
-    <div class="spec"><div class="spec-l">Bedrooms</div><div class="spec-v">${row.Beds || '—'}</div></div>
-    <div class="spec"><div class="spec-l">Bathrooms</div><div class="spec-v">${row.Baths || '—'}</div></div>
-    ${row.Car_Spaces != null ? `<div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${row.Car_Spaces}</div></div>` : ''}
-    ${row.Land_Size_sqm ? `<div class="spec"><div class="spec-l">Land</div><div class="spec-v">${row.Land_Size_sqm} m²</div></div>` : ''}
-  </div>
-  ${row.URL ? `<a href="${row.URL}" target="_blank" class="popup-btn">View Listing →</a>` : ''}
-</div>`;
-        
-        L.circleMarker([row.Latitude, row.Longitude], {
-            radius: r0, 
-            fillColor: color, 
-            color: 'rgba(255,255,255,0.6)', 
-            weight: 1.2, 
-            opacity: 1, 
-            fillOpacity: 0.85
-        }).bindPopup(popup, {maxWidth: 280}).addTo(markerLayer);
+        const t = row.Property_Type || 'Unknown'; typeCnt[t] = (typeCnt[t]||0) + 1;
     });
 
-    // Median
+    // Calculate Suburb Medians, Means
+    for (let sub in cachedSuburbStats) {
+        let arr = cachedSuburbStats[sub].prices;
+        if (arr.length > 0) {
+            arr.sort((a,b)=>a-b);
+            cachedSuburbStats[sub].min = arr[0];
+            cachedSuburbStats[sub].max = arr[arr.length-1];
+            cachedSuburbStats[sub].mean = arr.reduce((a,b)=>a+b,0) / arr.length;
+            cachedSuburbStats[sub].median = arr.length%2===0 ? (arr[arr.length/2-1]+arr[arr.length/2])/2 : arr[Math.floor(arr.length/2)];
+        } else {
+            cachedSuburbStats[sub].min=0; cachedSuburbStats[sub].max=0; cachedSuburbStats[sub].mean=0; cachedSuburbStats[sub].median=0;
+        }
+    }
+
     prices.sort((a,b)=>a-b);
     const median = prices.length ? (prices.length%2===0 ? (prices[prices.length/2-1]+prices[prices.length/2])/2 : prices[Math.floor(prices.length/2)]) : 0;
-
-    // Suburb avg prices cache
-    cachedSuburbAvg = {};
-    Object.keys(subPriceSum).forEach(s => {
-        if (subPriceCnt[s] >= 3) cachedSuburbAvg[s] = subPriceSum[s] / subPriceCnt[s];
-    });
 
     document.getElementById('statTotal').textContent = data.length.toLocaleString();
     document.getElementById('statAvgPrice').textContent = nPrice ? '$'+Math.round(tPrice/nPrice).toLocaleString() : '—';
     document.getElementById('statMedian').textContent = median ? '$'+Math.round(median).toLocaleString() : '—';
-    document.getElementById('statSuburbs').textContent = Object.keys(subCnt).length.toLocaleString();
+    document.getElementById('statSuburbs').textContent = Object.keys(cachedSuburbStats).length.toLocaleString();
 
-    drawSuburbVolume(subCnt);
-    drawSuburbPrice();
-    drawHistogram(prices);
-    drawType(typeCnt);
-    drawBeds(bDist);
+    let subCnt = {}; for(let s in cachedSuburbStats) subCnt[s] = cachedSuburbStats[s].count;
+
+    drawSuburbVolume(subCnt); drawSuburbPrice(); drawHistogram(prices); drawType(typeCnt); drawBeds(bDist);
+}
+
+/* ── MAP RENDER ── */
+function renderMap(data) {
+    markerLayer.clearLayers();
+    if(choroLayer) { map.removeLayer(choroLayer); choroLayer = null; }
+
+    if (mapMode === 'points') {
+        const r0 = dotRadius(map.getZoom());
+        data.forEach(row => {
+            const p = row.Numeric_Price;
+            const color = RANGE_COLORS[priceRange(p)];
+            const badgeCls = row.Status === 'Sold' ? 'badge-sold' : 'badge-sale';
+            
+            const popup = `
+            <div class="popup-body">
+            <div class="popup-header-row">
+                <span class="popup-badge ${badgeCls}">${row.Status || 'Listed'}</span>
+                <span class="popup-date">${row.Date || ''}</span>
+            </div>
+            <div class="popup-addr">${row.Full_Address || 'Address unavailable'}</div>
+            <div class="popup-price" style="color:${color}">${p ? '$'+p.toLocaleString() : (row.Raw_Price||'Price Withheld')}</div>
+            <div class="popup-specs">
+                <div class="spec"><div class="spec-l">Type</div><div class="spec-v">${row.Property_Type || 'N/A'}</div></div>
+                <div class="spec"><div class="spec-l">Method</div><div class="spec-v">${row.Method || 'N/A'}</div></div>
+                <div class="spec"><div class="spec-l">Beds</div><div class="spec-v">${row.Beds || '—'}</div></div>
+                <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${row.Baths || '—'}</div></div>
+                <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${row.Car_Spaces!=null ? row.Car_Spaces : '—'}</div></div>
+                <div class="spec"><div class="spec-l">To CBD</div><div class="spec-v">${row.Distance_to_CBD_km ? row.Distance_to_CBD_km+' km' : '—'}</div></div>
+                <div class="spec full"><div class="spec-l">Agency</div><div class="spec-v" style="white-space:normal">${row.SellerG || 'N/A'}</div></div>
+            </div>
+            ${row.URL && row.URL!=='N/A' ? `<a href="${row.URL}" target="_blank" class="popup-btn">View Listing →</a>` : ''}
+            </div>`;
+            
+            L.circleMarker([row.Latitude, row.Longitude], {
+                radius: r0, fillColor: color, color: 'rgba(255,255,255,0.6)', weight: 1.2, opacity: 1, fillOpacity: 0.85
+            }).bindPopup(popup, {maxWidth: 300}).addTo(markerLayer);
+        });
+    } 
+    else if (mapMode === 'choropleth') {
+        if(geojsonData) {
+            choroLayer = L.geoJSON(geojsonData, {
+                style: function(feature) {
+                    const subName = String(feature.properties.Suburb).toUpperCase();
+                    const stats = cachedSuburbStats[subName];
+                    let fillColor = '#cbd5e1'; let fillOpacity = 0.3;
+                    if(stats && stats.median > 0) {
+                        fillColor = RANGE_COLORS[priceRange(stats.median)];
+                        fillOpacity = 0.7;
+                    }
+                    return { color: '#ffffff', weight: 1.5, fillColor: fillColor, fillOpacity: fillOpacity };
+                },
+                onEachFeature: function(feature, layer) {
+                    const subName = String(feature.properties.Suburb).toUpperCase();
+                    const stats = cachedSuburbStats[subName];
+                    let tt = '';
+                    if(stats && stats.count > 0) {
+                        tt = `<div class="choro-tooltip">
+                                <div class="choro-title">${subName}</div>
+                                <div class="choro-stat"><span>Properties:</span> <b>${stats.count}</b></div>
+                                <div class="choro-stat"><span>Median:</span> <b>$${stats.median > 0 ? stats.median.toLocaleString() : 'N/A'}</b></div>
+                                <div class="choro-stat"><span>Mean:</span> <b>$${stats.mean > 0 ? Math.round(stats.mean).toLocaleString() : 'N/A'}</b></div>
+                                <div class="choro-stat"><span>Min:</span> <b>$${stats.min > 0 ? stats.min.toLocaleString() : 'N/A'}</b></div>
+                                <div class="choro-stat"><span>Max:</span> <b>$${stats.max > 0 ? stats.max.toLocaleString() : 'N/A'}</b></div>
+                              </div>`;
+                    } else {
+                        tt = `<div class="choro-tooltip"><div class="choro-title">${subName}</div><div class="choro-stat">No data matching filters</div></div>`;
+                    }
+                    layer.bindTooltip(tt, {sticky: true, direction: 'top', className: 'leaflet-tooltip-own'});
+                }
+            }).addTo(map);
+        } else {
+            console.log("GeoJSON data not available to draw choropleth.");
+        }
+    }
 }
 
 /* ── SUBURB PRICE TOGGLE ── */
-function setSuburbPriceMode(mode) {
+window.setSuburbPriceMode = function(mode) {
     suburbPriceMode = mode;
     document.getElementById('btnHighest').classList.toggle('active', mode==='highest');
     document.getElementById('btnLowest').classList.toggle('active', mode==='lowest');
     drawSuburbPrice();
 }
-window.setSuburbPriceMode = setSuburbPriceMode;
 
 /* ── CHARTS ── */
 function destroyChart(k) { if(charts[k]){charts[k].destroy(); delete charts[k];} }
@@ -739,207 +664,48 @@ function drawSuburbVolume(subCnt) {
     const sorted = Object.entries(subCnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
     const ctx = document.getElementById('suburbChart').getContext('2d');
     charts.suburbVol = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: sorted.map(i=>i[0]),
-            datasets: [{ 
-                data: sorted.map(i=>i[1]),
-                backgroundColor: 'rgba(37,99,235,0.1)', 
-                hoverBackgroundColor: 'rgba(37,99,235,0.22)',
-                borderColor: 'rgba(37,99,235,0.5)', 
-                borderWidth: 1.5,
-                borderRadius: 6, 
-                borderSkipped: false, 
-                barPercentage: 0.62 
-            }]
-        },
-        options: {
-            indexAxis:'y', 
-            responsive:true, 
-            maintainAspectRatio:false,
-            plugins:{ 
-                legend:{display:false}, 
-                tooltip:{callbacks:{label:c=>' '+c.parsed.x.toLocaleString()+' properties'}} 
-            },
-            scales:{
-                x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}}},
-                y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}}
-            },
-            animation:{duration:500,easing:'easeOutQuart'}
-        }
+        type: 'bar', data: { labels: sorted.map(i=>i[0]), datasets: [{ data: sorted.map(i=>i[1]), backgroundColor: 'rgba(37,99,235,0.1)', hoverBackgroundColor: 'rgba(37,99,235,0.22)', borderColor: 'rgba(37,99,235,0.5)', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.62 }] },
+        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>' '+c.parsed.x.toLocaleString()+' properties'}} }, scales:{ x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}}}, y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}} } }
     });
 }
 
 function drawSuburbPrice() {
     destroyChart('suburbPrice');
-    const entries = Object.entries(cachedSuburbAvg);
+    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].median > 0);
     if (!entries.length) return;
-
-    const sorted = entries.sort((a,b) => suburbPriceMode==='highest' ? b[1]-a[1] : a[1]-b[1]).slice(0,10);
-    const color = suburbPriceMode==='highest' ? '#e11d48' : '#059669';
-    const bgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.08)' : 'rgba(5,150,105,0.08)';
-
+    const sorted = entries.sort((a,b) => suburbPriceMode==='highest' ? b[1].median-a[1].median : a[1].median-b[1].median).slice(0,10);
+    const color = suburbPriceMode==='highest' ? '#e11d48' : '#059669'; const bgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.08)' : 'rgba(5,150,105,0.08)';
     const ctx = document.getElementById('suburbPriceChart').getContext('2d');
     charts.suburbPrice = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: sorted.map(i=>i[0]),
-            datasets: [{
-                data: sorted.map(i=>Math.round(i[1])),
-                backgroundColor: bgAlpha,
-                hoverBackgroundColor: bgAlpha.replace('0.08','0.18'),
-                borderColor: color+'99',
-                borderWidth: 1.5,
-                borderRadius: 6, 
-                borderSkipped: false, 
-                barPercentage: 0.62
-            }]
-        },
-        options: {
-            indexAxis:'y', 
-            responsive:true, 
-            maintainAspectRatio:false,
-            plugins:{ 
-                legend:{display:false}, 
-                tooltip:{callbacks:{label:c=>' $'+c.parsed.x.toLocaleString()}} 
-            },
-            scales:{
-                x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}, callback:v=>'$'+(v>=1000000?(v/1000000).toFixed(1)+'M':(v/1000).toFixed(0)+'k')}},
-                y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}}
-            },
-            animation:{duration:400,easing:'easeOutQuart'}
-        }
+        type: 'bar', data: { labels: sorted.map(i=>i[0]), datasets: [{ data: sorted.map(i=>Math.round(i[1].median)), backgroundColor: bgAlpha, hoverBackgroundColor: bgAlpha.replace('0.08','0.18'), borderColor: color+'99', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.62 }] },
+        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>' $'+c.parsed.x.toLocaleString()}} }, scales:{ x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}, callback:v=>'$'+(v>=1000000?(v/1000000).toFixed(1)+'M':(v/1000).toFixed(0)+'k')}}, y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}} } }
     });
 }
 
 function drawHistogram(prices) {
-    destroyChart('price');
-    if (!prices.length) return;
-
-    const BIN = 250000;
-    const MAX_BIN = 5000000;
-    const bins = [];
-    for (let lo = 0; lo < MAX_BIN; lo += BIN) {
-        const hi = lo + BIN;
-        bins.push({ label: '$'+(hi/1000)+'k', min: lo, max: hi });
-    }
+    destroyChart('price'); if (!prices.length) return;
+    const BIN = 250000; const MAX_BIN = 5000000; const bins = [];
+    for (let lo = 0; lo < MAX_BIN; lo += BIN) bins.push({ label: '$'+(lo+BIN)/1000+'k', min: lo, max: lo+BIN });
     bins.push({ label: '>$5M', min: MAX_BIN, max: Infinity });
-
     const counts = bins.map(b => prices.filter(p => p >= b.min && p < b.max).length);
-    const colors = bins.map(b => {
-        const mid = b.max === Infinity ? 6000000 : (b.min + b.max) / 2;
-        return RANGE_COLORS[priceRange(mid)];
-    });
-
+    const colors = bins.map(b => RANGE_COLORS[priceRange(b.max === Infinity ? 6000000 : (b.min+b.max)/2)]);
     const ctx = document.getElementById('priceChart').getContext('2d');
     charts.price = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: bins.map(b => b.label),
-            datasets: [{
-                data: counts,
-                backgroundColor: colors.map(c => c + '28'),
-                borderColor: colors,
-                borderWidth: 1.5,
-                borderRadius: 0,
-                borderSkipped: false,
-                barPercentage: 1.0,
-                categoryPercentage: 1.0
-            }]
-        },
-        options: {
-            responsive: true, 
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    callbacks: {
-                        title: items => {
-                            const b = bins[items[0].dataIndex];
-                            const lo = b.min === 0 ? '$0' : '$'+(b.min/1000)+'k';
-                            const hi = b.max === Infinity ? '∞' : '$'+(b.max/1000)+'k';
-                            return `${lo} – ${hi}`;
-                        },
-                        label: c => ' ' + c.parsed.y.toLocaleString() + ' properties'
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    grid: { display: false }, 
-                    border: { display: false },
-                    ticks: { color: '#7c8499', font: { size: 9.5 }, maxRotation: 45, minRotation: 45 }
-                },
-                y: { grid: { color: 'rgba(0,0,0,0.05)' }, border: { display: false }, ticks: { color: '#7c8499', font: { size: 11 } } }
-            }
-        }
+        type: 'bar', data: { labels: bins.map(b=>b.label), datasets: [{ data: counts, backgroundColor: colors.map(c=>c+'28'), borderColor: colors, borderWidth: 1.5, borderRadius: 0, barPercentage: 1.0, categoryPercentage: 1.0 }] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => { const b = bins[items[0].dataIndex]; return `${b.min===0?'$0':'$'+b.min/1000+'k'} – ${b.max===Infinity?'∞':'$'+b.max/1000+'k'}`; }, label: c => ' ' + c.parsed.y.toLocaleString() + ' properties' } } }, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: '#7c8499', font: { size: 9.5 }, maxRotation: 45, minRotation: 45 } }, y: { grid: { color: 'rgba(0,0,0,0.05)' }, border: { display: false }, ticks: { color: '#7c8499', font: { size: 11 } } } } }
     });
 }
 
 function drawType(typeCnt) {
-    destroyChart('type');
-    if (!Object.keys(typeCnt).length) return;
-
+    destroyChart('type'); if (!Object.keys(typeCnt).length) return;
     const sortedEntries = Object.entries(typeCnt).sort((a,b) => b[1]-a[1]);
-    
     let labels, vals;
-    
-    if (sortedEntries.length <= 8) {
-        labels = sortedEntries.map(e => e[0]);
-        vals = sortedEntries.map(e => e[1]);
-    } else {
-        const top8 = sortedEntries.slice(0, 8);
-        const otherSum = sortedEntries.slice(8).reduce((sum, entry) => sum + entry[1], 0);
-        
-        labels = [...top8.map(e => e[0]), 'Other'];
-        vals = [...top8.map(e => e[1]), otherSum];
-    }
-
-    const PALETTE = [
-        '#2563eb', '#059669', '#d97706', '#7c3aed', 
-        '#0891b2', '#c2410c', '#65a30d', '#db2777', '#94a3b8'
-    ];
-
+    if (sortedEntries.length <= 8) { labels = sortedEntries.map(e => e[0]); vals = sortedEntries.map(e => e[1]); } else { labels = [...sortedEntries.slice(0,8).map(e=>e[0]), 'Other']; vals = [...sortedEntries.slice(0,8).map(e=>e[1]), sortedEntries.slice(8).reduce((s,e)=>s+e[1],0)]; }
+    const PALETTE = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0891b2', '#c2410c', '#65a30d', '#db2777', '#94a3b8'];
     const ctx = document.getElementById('typeChart').getContext('2d');
     charts.type = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels,
-            datasets: [{
-                data: vals,
-                backgroundColor: PALETTE.slice(0, labels.length).map(c => c + '30'),
-                borderColor: PALETTE.slice(0, labels.length),
-                borderWidth: 2,
-                hoverOffset: 10,
-                hoverBorderWidth: 2.5
-            }]
-        },
-        options: {
-            responsive: true, 
-            maintainAspectRatio: false, 
-            cutout: '62%',
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                    labels: {
-                        padding: 12, 
-                        usePointStyle: true, 
-                        pointStyle: 'circle',
-                        color: '#4a5168', 
-                        font: { size: 11 }
-                    }
-                },
-                tooltip: {
-                    callbacks: {
-                        label: ctx => {
-                            const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-                            const pct = ((ctx.parsed / total)*100).toFixed(1);
-                            return `  ${ctx.label}: ${ctx.parsed.toLocaleString()} (${pct}%)`;
-                        }
-                    }
-                }
-            }
-        }
+        type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE.slice(0,labels.length).map(c=>c+'30'), borderColor: PALETTE.slice(0,labels.length), borderWidth: 2, hoverOffset: 10 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyle: 'circle', color: '#4a5168', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `  ${ctx.label}: ${ctx.parsed.toLocaleString()} (${((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)` } } } }
     });
 }
 
@@ -948,26 +714,8 @@ function drawBeds(bDist) {
     const ctx = document.getElementById('bedsChart').getContext('2d');
     const C = ['#2563eb','#059669','#d97706','#7c3aed','#94a3b8'];
     charts.beds = new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-            labels: Object.keys(bDist),
-            datasets: [{
-                data: Object.values(bDist),
-                backgroundColor: C.map(c=>c+'25'),
-                borderColor: C,
-                borderWidth: 2,
-                hoverOffset: 8
-            }]
-        },
-        options: {
-            responsive:true, 
-            maintainAspectRatio:false, 
-            cutout:'62%',
-            plugins:{
-                legend:{position:'bottom', labels:{padding:14, usePointStyle:true, pointStyle:'circle', color:'#4a5168', font:{size:12}}},
-                tooltip:{callbacks:{label:c=>' '+c.label+': '+c.parsed.toLocaleString()}}
-            }
-        }
+        type: 'doughnut', data: { labels: Object.keys(bDist), datasets: [{ data: Object.values(bDist), backgroundColor: C.map(c=>c+'25'), borderColor: C, borderWidth: 2, hoverOffset: 8 }] },
+        options: { responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom', labels:{padding:14, usePointStyle:true, pointStyle:'circle', color:'#4a5168', font:{size:12}}}, tooltip:{callbacks:{label:c=>' '+c.label+': '+c.parsed.toLocaleString()}} } }
     });
 }
 </script>

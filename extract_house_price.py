@@ -75,8 +75,8 @@ def save_incremental_data(new_data_list, file_path):
 # ==========================================
 # 2. BROWSER SESSION & SETUP
 # ==========================================
-LAT_NORTH, LAT_SOUTH = -37.4000, -38.2000
-LNG_WEST, LNG_EAST = 144.6000, 145.4000
+LAT_NORTH, LAT_SOUTH = -37.35, -38.5
+LNG_WEST, LNG_EAST = 144.3, 145.85
 lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
 lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
 
