@@ -166,7 +166,7 @@ try:
                                 
                                 full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
                                 
-                                # 1. NGÀY BÁN / NGÀY ĐĂNG (BRUTE-FORCE REGEX)
+                                # 1. DATE SOLD / DATE LISTED (BRUTE-FORCE REGEX)
                                 date_val = m.get('dateSold', m.get('dateListed'))
                                 if not date_val: date_val = m.get('status', {}).get('date')
                                 
@@ -181,7 +181,7 @@ try:
                                 
                                 if not date_val: date_val = 'N/A'
                                 
-                                # 2. PHÂN LOẠI METHOD CHI TIẾT (CHỈ GIỮ AUCTION VÀ PRIVATE TREATY)
+                                # 2. DETAILED METHOD CLASSIFICATION (AUCTION OR PRIVATE TREATY ONLY)
                                 tags = [str(t).lower() for t in m.get('tags', [])]
                                 status_type = str(m.get('status', {}).get('type', '')).lower()
                                 combined_text = (raw_price + " " + " ".join(tags) + " " + status_type).lower()
@@ -194,6 +194,17 @@ try:
                                 else:
                                     # Fallback to Private Treaty as the default for non-auctions in Australia
                                     method = "Private Treaty"
+                                
+                                # 3. CONVERT HA TO SQM
+                                raw_land_size = f.get('landSize', np.nan)
+                                land_unit = str(f.get('landUnit', '')).lower()
+                                try:
+                                    if pd.notna(raw_land_size):
+                                        raw_land_size = float(raw_land_size)
+                                        if 'ha' in land_unit or 'hectare' in land_unit:
+                                            raw_land_size = raw_land_size * 10000
+                                except:
+                                    pass
 
                                 if full_address:
                                     record = {
@@ -208,8 +219,8 @@ try:
                                         'Beds': f.get('beds', 0),
                                         'Baths': f.get('baths', 0),
                                         'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
-                                        'LandSize_sqm': f.get('landSize', np.nan),
-                                        'Propertycount': np.nan, # Được update tự động ở hàm save_incremental_data
+                                        'LandSize_sqm': raw_land_size,
+                                        'Propertycount': np.nan, # Auto updated in save_incremental_data
                                         'Raw_Price': raw_price,
                                         'Numeric_Price': parse_raw_price(raw_price),
                                         'Latitude': lat,
@@ -230,4 +241,4 @@ try:
         if block_counter >= 3: break
 
 finally:
-    print("\n✅ THU THẬP HOÀN TẤT.")
+    print("\n✅ SCRAPING COMPLETED.")

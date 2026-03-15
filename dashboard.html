@@ -83,6 +83,8 @@
         .suburb-opt:hover { background: var(--accent-light); color: var(--accent); }
         .suburb-opt.selected { color: var(--accent); font-weight: 600; }
         .suburb-opt.no-results { color: var(--text-muted); cursor: default; font-style: italic; }
+        .suburb-dropdown::-webkit-scrollbar { width: 3px; }
+        .suburb-dropdown::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
 
         .price-range-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .price-input-box { display: flex; align-items: center; gap: 6px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; transition: border-color .2s, box-shadow .2s; }
@@ -140,7 +142,7 @@
         .popup-btn { display: block; text-align: center; background: var(--accent2); color: var(--accent); padding: 9px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 12px; transition: background .2s; border: 1px solid var(--border); margin-top: 10px;}
         .popup-btn:hover { background: var(--accent-light); }
 
-        /* Tooltip cho Choropleth */
+        /* Tooltip cho Proportional Map */
         .choro-tooltip { background: rgba(255,255,255,0.96); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'DM Sans', sans-serif; color: var(--text); box-shadow: var(--shadow-sm); }
         .choro-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: var(--accent); }
         .choro-stat { font-size: 12px; margin-bottom: 3px; display: flex; justify-content: space-between; gap: 15px;}
@@ -262,7 +264,7 @@
                 <span class="panel-title" id="mapTitle">Valuation Map</span>
                 <div class="toggle-btn-group">
                     <button class="toggle-btn active" id="btnMapPoints" onclick="setMapMode('points')">Points</button>
-                    <button class="toggle-btn" id="btnMapChoro" onclick="setMapMode('choropleth')">Suburb Heatmap</button>
+                    <button class="toggle-btn" id="btnMapProp" onclick="setMapMode('proportional')">Suburb Bubbles</button>
                 </div>
             </div>
             <div id="map"></div>
@@ -329,9 +331,10 @@ let priceMinVal = null, priceMaxVal = null, showWithheld = true;
 let charts = {}, suburbPriceMode = 'highest';
 let cachedSuburbStats = {};
 
-let mapMode = 'points'; // 'points' | 'choropleth'
+let mapMode = 'points'; // 'points' | 'proportional'
 let geojsonData = null;
-let choroLayer = null;
+let choroLayer = null; // Layer để vẽ viền ranh giới Suburb
+let suburbLayer = null; // Layer để vẽ bong bóng Proportional
 
 const RANGE_COLORS = { '0':'#059669','1':'#2563eb','2':'#d97706','3':'#e11d48','w':'#94a3b8' };
 
@@ -347,7 +350,7 @@ function priceRange(p) {
 fetch('data/melbourne_suburb_boundaries.geojson')
     .then(r => r.json())
     .then(data => { geojsonData = data; })
-    .catch(e => console.log('No geojson found, choropleth map will not render.'));
+    .catch(e => console.log('No geojson found, boundary map will not render.'));
 
 /* ── MAP SETUP ── */
 // Dùng preferCanvas để render >10k điểm siêu mượt mà không cần cluster
@@ -368,24 +371,44 @@ map.on('zoomend', () => {
 });
 
 const legend = L.control({ position: 'bottomright' });
-legend.onAdd = function() {
+
+function updateLegend() {
     const d = L.DomUtil.create('div','mlegend');
-    d.innerHTML = `
-        <div class="mlegend-title">Median Price Range</div>
-        <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
-        <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
-        <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
-        <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
-        <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>No Data</div>`;
-    return d;
-};
-legend.addTo(map);
+    if (mapMode === 'points') {
+        d.innerHTML = `
+            <div class="mlegend-title">Price Range</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>Price Withheld</div>`;
+    } else {
+        d.innerHTML = `
+            <div class="mlegend-title">Median Price Range</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
+            <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>No Data</div>`;
+    }
+    
+    // Xóa nội dung cũ
+    const legendContainer = document.querySelector('.mlegend');
+    if(legendContainer) {
+        legendContainer.innerHTML = d.innerHTML;
+    } else {
+        legend.onAdd = function() { return d; };
+        legend.addTo(map);
+    }
+}
+
 
 /* ── MAP TOGGLE ── */
 window.setMapMode = function(mode) {
     mapMode = mode;
     document.getElementById('btnMapPoints').classList.toggle('active', mode==='points');
-    document.getElementById('btnMapChoro').classList.toggle('active', mode==='choropleth');
+    document.getElementById('btnMapProp').classList.toggle('active', mode==='proportional');
+    updateLegend();
     renderMap(currentFilteredData);
 };
 
@@ -488,6 +511,7 @@ function buildTypes(data) {
 
 /* ── LOAD ── */
 window.onload = () => {
+    updateLegend(); // Khởi tạo legend lúc load
     Papa.parse("data/melbourne_price_data.csv", {
         download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
         complete: res => {
@@ -529,8 +553,13 @@ function calculateStatsAndRenderCharts(data) {
     data.forEach(row => {
         const sub = row.Suburb;
         if(sub) {
-            if(!cachedSuburbStats[sub]) cachedSuburbStats[sub] = { prices: [], count: 0 };
+            // Lưu tổng lat, lon để lấy center dự phòng nếu GeoJSON bị thiếu
+            if(!cachedSuburbStats[sub]) cachedSuburbStats[sub] = { prices: [], count: 0, latSum: 0, lonSum: 0 };
             cachedSuburbStats[sub].count++;
+            if (row.Latitude && row.Longitude) {
+                cachedSuburbStats[sub].latSum += row.Latitude;
+                cachedSuburbStats[sub].lonSum += row.Longitude;
+            }
         }
 
         const p = row.Numeric_Price;
@@ -546,17 +575,21 @@ function calculateStatsAndRenderCharts(data) {
         const t = row.Property_Type || 'Unknown'; typeCnt[t] = (typeCnt[t]||0) + 1;
     });
 
-    // Calculate Suburb Medians, Means
+    // Calculate Suburb Medians, Means, and Centroids
     for (let sub in cachedSuburbStats) {
-        let arr = cachedSuburbStats[sub].prices;
+        let stats = cachedSuburbStats[sub];
+        stats.lat = stats.latSum / stats.count;
+        stats.lon = stats.lonSum / stats.count;
+        
+        let arr = stats.prices;
         if (arr.length > 0) {
             arr.sort((a,b)=>a-b);
-            cachedSuburbStats[sub].min = arr[0];
-            cachedSuburbStats[sub].max = arr[arr.length-1];
-            cachedSuburbStats[sub].mean = arr.reduce((a,b)=>a+b,0) / arr.length;
-            cachedSuburbStats[sub].median = arr.length%2===0 ? (arr[arr.length/2-1]+arr[arr.length/2])/2 : arr[Math.floor(arr.length/2)];
+            stats.min = arr[0];
+            stats.max = arr[arr.length-1];
+            stats.mean = arr.reduce((a,b)=>a+b,0) / arr.length;
+            stats.median = arr.length%2===0 ? (arr[arr.length/2-1]+arr[arr.length/2])/2 : arr[Math.floor(arr.length/2)];
         } else {
-            cachedSuburbStats[sub].min=0; cachedSuburbStats[sub].max=0; cachedSuburbStats[sub].mean=0; cachedSuburbStats[sub].median=0;
+            stats.min=0; stats.max=0; stats.mean=0; stats.median=0;
         }
     }
 
@@ -575,8 +608,10 @@ function calculateStatsAndRenderCharts(data) {
 
 /* ── MAP RENDER ── */
 function renderMap(data) {
+    // Xóa sạch các layer cũ trước khi vẽ lại
     markerLayer.clearLayers();
     if(choroLayer) { map.removeLayer(choroLayer); choroLayer = null; }
+    if(suburbLayer) { map.removeLayer(suburbLayer); suburbLayer = null; }
 
     if (mapMode === 'points') {
         const r0 = dotRadius(map.getZoom());
@@ -600,59 +635,98 @@ function renderMap(data) {
                 <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${row.Baths || '—'}</div></div>
                 <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${row.Car_Spaces!=null ? row.Car_Spaces : '—'}</div></div>
                 <div class="spec"><div class="spec-l">To CBD</div><div class="spec-v">${row.Distance_to_CBD_km ? row.Distance_to_CBD_km+' km' : '—'}</div></div>
-                <div class="spec full"><div class="spec-l">Agency</div><div class="spec-v" style="white-space:normal">${row.SellerG || 'N/A'}</div></div>
+                <div class="spec"><div class="spec-l">Land Area</div><div class="spec-v" style="white-space:normal">${row.LandSize_sqm ? row.LandSize_sqm + ' m²' : 'N/A'}</div></div>
             </div>
             ${row.URL && row.URL!=='N/A' ? `<a href="${row.URL}" target="_blank" class="popup-btn">View Listing →</a>` : ''}
             </div>`;
             
+            // Sử dụng L.circleMarker giúp điểm cố định kích thước khi zoom ra/vào
             L.circleMarker([row.Latitude, row.Longitude], {
                 radius: r0, fillColor: color, color: 'rgba(255,255,255,0.6)', weight: 1.2, opacity: 1, fillOpacity: 0.85
             }).bindPopup(popup, {maxWidth: 300}).addTo(markerLayer);
         });
     } 
-    else if (mapMode === 'choropleth') {
+    else if (mapMode === 'proportional') {
+        // Khởi tạo Layer cho các cục Bubbles
+        suburbLayer = L.layerGroup().addTo(map);
+
         if(geojsonData) {
+            // Vẽ ranh giới đa giác (Chỉ vẽ viền mờ)
             choroLayer = L.geoJSON(geojsonData, {
-                style: function(feature) {
-                    const subName = String(feature.properties.Suburb).toUpperCase();
-                    const stats = cachedSuburbStats[subName];
-                    let fillColor = '#cbd5e1'; let fillOpacity = 0.3;
-                    if(stats && stats.median > 0) {
-                        fillColor = RANGE_COLORS[priceRange(stats.median)];
-                        fillOpacity = 0.7;
-                    }
-                    return { color: '#ffffff', weight: 1.5, fillColor: fillColor, fillOpacity: fillOpacity };
-                },
+                style: { color: '#94a3b8', weight: 1, fillColor: 'transparent', fillOpacity: 0 },
+                interactive: false, // Để ranh giới không cản trở việc click vào bubbles
                 onEachFeature: function(feature, layer) {
                     const subName = String(feature.properties.Suburb).toUpperCase();
                     const stats = cachedSuburbStats[subName];
-                    let tt = '';
-                    if(stats && stats.count > 0) {
-                        tt = `<div class="choro-tooltip">
-                                <div class="choro-title">${subName}</div>
+                    
+                    if (stats && stats.count > 0) {
+                        // Tính toán tâm của đa giác Suburb để đặt Bubble chính xác nhất
+                        const center = layer.getBounds().getCenter();
+                        
+                        let fillColor = '#cbd5e1';
+                        if(stats.median > 0) fillColor = RANGE_COLORS[priceRange(stats.median)];
+
+                        // Công thức chỉnh Size đã sửa nhỏ lại
+                        let radius = 4 + Math.sqrt(stats.count) * 0.5;
+                        if (radius > 18) radius = 18; // Giới hạn max là 18px
+
+                        const tt = `<div class="choro-tooltip">
+                                        <div class="choro-title">${subName}</div>
+                                        <div class="choro-stat"><span>Properties:</span> <b>${stats.count}</b></div>
+                                        <div class="choro-stat"><span>Median:</span> <b>$${stats.median > 0 ? stats.median.toLocaleString() : 'N/A'}</b></div>
+                                        <div class="choro-stat"><span>Mean:</span> <b>$${stats.mean > 0 ? Math.round(stats.mean).toLocaleString() : 'N/A'}</b></div>
+                                        <div class="choro-stat"><span>Min:</span> <b>$${stats.min > 0 ? stats.min.toLocaleString() : 'N/A'}</b></div>
+                                        <div class="choro-stat"><span>Max:</span> <b>$${stats.max > 0 ? stats.max.toLocaleString() : 'N/A'}</b></div>
+                                    </div>`;
+                        
+                        // circleMarker giúp bóng bóng không đổi size khi zoom
+                        L.circleMarker(center, {
+                            radius: radius, fillColor: fillColor, color: '#ffffff', weight: 1.5, opacity: 1, fillOpacity: 0.85
+                        }).bindTooltip(tt, {sticky: true, direction: 'top', className: 'leaflet-tooltip-own'}).addTo(suburbLayer);
+                    }
+                }
+            }).addTo(map);
+        } else {
+            // Fallback: Nếu không tải được GeoJSON, lấy tọa độ trung bình từ CSV để vẽ Bubbles
+            for (let sub in cachedSuburbStats) {
+                const stats = cachedSuburbStats[sub];
+                if (stats.count === 0 || !stats.lat || !stats.lon || isNaN(stats.lat)) continue;
+
+                let fillColor = '#cbd5e1';
+                if(stats.median > 0) fillColor = RANGE_COLORS[priceRange(stats.median)];
+
+                // Sửa kích thước nhỏ lại ở Fallback
+                let radius = 4 + Math.sqrt(stats.count) * 0.5;
+                if (radius > 18) radius = 18;
+
+                const tt = `<div class="choro-tooltip">
+                                <div class="choro-title">${sub}</div>
                                 <div class="choro-stat"><span>Properties:</span> <b>${stats.count}</b></div>
                                 <div class="choro-stat"><span>Median:</span> <b>$${stats.median > 0 ? stats.median.toLocaleString() : 'N/A'}</b></div>
                                 <div class="choro-stat"><span>Mean:</span> <b>$${stats.mean > 0 ? Math.round(stats.mean).toLocaleString() : 'N/A'}</b></div>
                                 <div class="choro-stat"><span>Min:</span> <b>$${stats.min > 0 ? stats.min.toLocaleString() : 'N/A'}</b></div>
                                 <div class="choro-stat"><span>Max:</span> <b>$${stats.max > 0 ? stats.max.toLocaleString() : 'N/A'}</b></div>
-                              </div>`;
-                    } else {
-                        tt = `<div class="choro-tooltip"><div class="choro-title">${subName}</div><div class="choro-stat">No data matching filters</div></div>`;
-                    }
-                    layer.bindTooltip(tt, {sticky: true, direction: 'top', className: 'leaflet-tooltip-own'});
-                }
-            }).addTo(map);
-        } else {
-            console.log("GeoJSON data not available to draw choropleth.");
+                            </div>`;
+                
+                L.circleMarker([stats.lat, stats.lon], {
+                    radius: radius, fillColor: fillColor, color: '#ffffff', weight: 1.5, opacity: 1, fillOpacity: 0.85
+                }).bindTooltip(tt, {sticky: true, direction: 'top', className: 'leaflet-tooltip-own'}).addTo(suburbLayer);
+            }
         }
     }
 }
 
-/* ── SUBURB PRICE TOGGLE ── */
+/* ── SUBURB PRICE TOGGLE CẬP NHẬT ── */
 window.setSuburbPriceMode = function(mode) {
     suburbPriceMode = mode;
-    document.getElementById('btnHighest').classList.toggle('active', mode==='highest');
-    document.getElementById('btnLowest').classList.toggle('active', mode==='lowest');
+    // Sử dụng classList add/remove thay vì toggle(..., boolean) để tránh lỗi tương thích
+    if (mode === 'highest') {
+        document.getElementById('btnHighest').classList.add('active');
+        document.getElementById('btnLowest').classList.remove('active');
+    } else {
+        document.getElementById('btnHighest').classList.remove('active');
+        document.getElementById('btnLowest').classList.add('active');
+    }
     drawSuburbPrice();
 }
 
@@ -671,13 +745,21 @@ function drawSuburbVolume(subCnt) {
 
 function drawSuburbPrice() {
     destroyChart('suburbPrice');
-    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].median > 0);
+    
+    // Đã thêm ĐIỀU KIỆN "e[1].count >= 1" để LỌC BỎ dữ liệu rác/ít giao dịch làm hỏng chart Lowest
+    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].median > 0 && e[1].count >= 1);
     if (!entries.length) return;
+    
+    // Sort an toàn
     const sorted = entries.sort((a,b) => suburbPriceMode==='highest' ? b[1].median-a[1].median : a[1].median-b[1].median).slice(0,10);
-    const color = suburbPriceMode==='highest' ? '#e11d48' : '#059669'; const bgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.08)' : 'rgba(5,150,105,0.08)';
+    
+    const color = suburbPriceMode==='highest' ? '#e11d48' : '#059669'; 
+    const bgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.08)' : 'rgba(5,150,105,0.08)';
+    const hoverBgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.18)' : 'rgba(5,150,105,0.18)';
+
     const ctx = document.getElementById('suburbPriceChart').getContext('2d');
     charts.suburbPrice = new Chart(ctx, {
-        type: 'bar', data: { labels: sorted.map(i=>i[0]), datasets: [{ data: sorted.map(i=>Math.round(i[1].median)), backgroundColor: bgAlpha, hoverBackgroundColor: bgAlpha.replace('0.08','0.18'), borderColor: color+'99', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.62 }] },
+        type: 'bar', data: { labels: sorted.map(i=>i[0]), datasets: [{ data: sorted.map(i=>Math.round(i[1].median)), backgroundColor: bgAlpha, hoverBackgroundColor: hoverBgAlpha, borderColor: color+'99', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.62 }] },
         options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>' $'+c.parsed.x.toLocaleString()}} }, scales:{ x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}, callback:v=>'$'+(v>=1000000?(v/1000000).toFixed(1)+'M':(v/1000).toFixed(0)+'k')}}, y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}} } }
     });
 }
