@@ -180,7 +180,7 @@
             <h1 class="header-title">Melbourne <em>Market</em> Insight</h1>
         </div>
         <div class="header-right">
-            <div class="live-badge"><span class="live-dot"></span>Data Active</div>
+            <div class="live-badge"><span class="live-dot"></span><span id="lastUpdatedText">Loading...</span></div>
             <div id="resultChip"></div>
         </div>
     </div>
@@ -583,7 +583,10 @@ window.onload = () => {
             suburbs = [...new Set(allData.map(r => r.Suburb).filter(Boolean))].sort();
             buildTypes(allData);
             
-            // Xử lý tạo cột Year và cập nhật thanh Slider kép
+            // Xử lý Last Updated Date
+            let maxUpdatedDate = 0;
+            
+            // Xử lý tạo cột Year và tìm ngày cập nhật mới nhất
             let minYear = 2030, maxYear = 1900;
             allData.forEach(r => {
                 const ym = (r.Date || '').match(/\d{4}/);
@@ -596,7 +599,26 @@ window.onload = () => {
                 } else {
                     r.Year = null;
                 }
+                
+                // Cập nhật Last Updated Date
+                if (r.Last_Updated) {
+                    // Xóa dấu gạch nối để chuyển thành số (VD: 2026-03-15 -> 20260315)
+                    let numDate = parseInt(r.Last_Updated.replace(/-/g, ''));
+                    if (!isNaN(numDate) && numDate > maxUpdatedDate) {
+                        maxUpdatedDate = numDate;
+                    }
+                }
             });
+            
+            // Cập nhật text "Updated on..."
+            if (maxUpdatedDate > 0) {
+                let dateStr = maxUpdatedDate.toString();
+                // Định dạng lại thành YYYY-MM-DD
+                let formattedDate = `${dateStr.substring(0,4)}-${dateStr.substring(4,6)}-${dateStr.substring(6,8)}`;
+                document.getElementById('lastUpdatedText').textContent = `Updated on ${formattedDate}`;
+            } else {
+                 document.getElementById('lastUpdatedText').textContent = `Data Active`;
+            }
             
             if (minYear <= maxYear) {
                 ysMin.min = minYear - 1; ysMin.max = maxYear; ysMin.value = minYear - 1;
