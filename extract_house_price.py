@@ -108,7 +108,7 @@ def save_incremental_data(new_data_list, file_path):
 # ==========================================
 # NARROWED COORDINATES TO FIT GREATER MELBOURNE (Increases scraping speed)
 LAT_NORTH, LAT_SOUTH = -37.5, -38.5
-LNG_WEST, LNG_EAST = 144.35, 145.40
+LNG_WEST, LNG_EAST = 144.35, 145.5
 lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
 lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
 
