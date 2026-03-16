@@ -108,6 +108,11 @@
         .type-pill:hover { border-color: var(--border-hover); color: var(--text); }
         .type-pill.on { background: var(--accent-light); border-color: rgba(37,99,235,0.3); color: var(--accent); font-weight: 600; }
 
+        /* ── CUSTOM DUAL SLIDER STYLE ── */
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; margin: 0; padding: 0; outline: none; pointer-events: none; }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: transparent; border-radius: 4px; }
+        input[type=range]::-webkit-slider-thumb { border: 2.5px solid #fff; height: 16px; width: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; -webkit-appearance: none; margin-top: -5px; box-shadow: var(--shadow-sm); pointer-events: auto; position: relative; z-index: 10; }
+
         /* ── CONTENT GRID ── */
         .content-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-bottom: 18px; }
         .charts-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; }
@@ -250,6 +255,16 @@
             </div>
         </div>
 
+        <div class="filter-group" id="yearFilterGroup" style="display: none;">
+            <div class="filter-label">Year Sold <span id="yearLabel" style="color:var(--accent); font-weight:700; margin-left:4px;">All</span></div>
+            <div class="price-input-box" style="padding: 10px 12px; min-width: 160px; border-radius: 10px; position: relative; height: 36px; display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; left: 12px; right: 12px; height: 6px; background: var(--border); border-radius: 4px;"></div>
+                <div id="sliderFill" style="position: absolute; left: 12px; right: 12px; height: 6px; background: var(--accent); border-radius: 4px; width: 100%;"></div>
+                <input type="range" id="yearSliderMin" min="2010" max="2026" value="2010" style="position: absolute; left: 12px; width: calc(100% - 24px); z-index: 3;">
+                <input type="range" id="yearSliderMax" min="2010" max="2026" value="2026" style="position: absolute; left: 12px; width: calc(100% - 24px); z-index: 4;">
+            </div>
+        </div>
+
         <div class="filter-group">
             <div class="filter-label">Property Type</div>
             <div class="type-pills" id="typePills">
@@ -326,7 +341,7 @@ Chart.defaults.plugins.tooltip.displayColors = false;
 
 /* ── STATE ── */
 let allData = [], suburbs = [], currentFilteredData = [];
-let selSuburb = 'ALL', activeType = 'ALL', activeStatus = 'For Sale';
+let selSuburb = 'ALL', activeType = 'ALL', activeStatus = 'For Sale', activeYearMin = 'ALL', activeYearMax = 'ALL';
 let priceMinVal = null, priceMaxVal = null, showWithheld = true;
 let charts = {}, suburbPriceMode = 'highest';
 let cachedSuburbStats = {};
@@ -419,6 +434,10 @@ document.getElementById('statusTabs').addEventListener('click', e => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     activeStatus = btn.dataset.status;
+    
+    // Hiện/Ẩn Slider Year
+    document.getElementById('yearFilterGroup').style.display = (activeStatus === 'Sold') ? 'flex' : 'none';
+    
     applyFilters();
 });
 
@@ -430,6 +449,50 @@ function debounce(func, wait) {
         timeout = setTimeout(() => func.apply(this, args), wait);
     };
 }
+
+/* ── DUAL YEAR SLIDER LOGIC ── */
+const ysMin = document.getElementById('yearSliderMin');
+const ysMax = document.getElementById('yearSliderMax');
+const yl = document.getElementById('yearLabel');
+const sliderFill = document.getElementById('sliderFill');
+
+function updateYearSlider(e) {
+    let minV = parseInt(ysMin.value);
+    let maxV = parseInt(ysMax.value);
+    
+    // Prevent overlapping logically
+    if (minV > maxV) {
+        if (e && e.target.id === 'yearSliderMin') { ysMin.value = maxV; minV = maxV; } 
+        else { ysMax.value = minV; maxV = minV; }
+    }
+
+    const minLimit = parseInt(ysMin.min);
+    const maxLimit = parseInt(ysMax.max);
+    
+    if (minV == minLimit && maxV == maxLimit) {
+        yl.textContent = 'All';
+        activeYearMin = 'ALL'; activeYearMax = 'ALL';
+    } else if (minV === maxV) {
+        yl.textContent = minV;
+        activeYearMin = minV; activeYearMax = maxV;
+    } else {
+        yl.textContent = minV + ' - ' + maxV;
+        activeYearMin = minV; activeYearMax = maxV;
+    }
+
+    // Update the colored fill
+    if(maxLimit > minLimit) {
+        const pct1 = ((minV - minLimit) / (maxLimit - minLimit)) * 100;
+        const pct2 = ((maxV - minLimit) / (maxLimit - minLimit)) * 100;
+        sliderFill.style.left = `calc(12px + (100% - 24px) * ${pct1 / 100})`;
+        sliderFill.style.width = `calc((100% - 24px) * ${(pct2 - pct1) / 100})`;
+    }
+}
+
+ysMin.addEventListener('input', updateYearSlider);
+ysMax.addEventListener('input', updateYearSlider);
+ysMin.addEventListener('change', () => applyFilters());
+ysMax.addEventListener('change', () => applyFilters());
 
 /* ── SUBURB SEARCH ── */
 const subInput = document.getElementById('suburbInput');
@@ -519,6 +582,28 @@ window.onload = () => {
             allData = res.data.filter(r => r.Latitude && r.Longitude);
             suburbs = [...new Set(allData.map(r => r.Suburb).filter(Boolean))].sort();
             buildTypes(allData);
+            
+            // Xử lý tạo cột Year và cập nhật thanh Slider kép
+            let minYear = 2030, maxYear = 1900;
+            allData.forEach(r => {
+                const ym = (r.Date || '').match(/\d{4}/);
+                if (ym) {
+                    r.Year = parseInt(ym[0]);
+                    if (r.Status === 'Sold') {
+                        if (r.Year < minYear) minYear = r.Year;
+                        if (r.Year > maxYear) maxYear = r.Year;
+                    }
+                } else {
+                    r.Year = null;
+                }
+            });
+            
+            if (minYear <= maxYear) {
+                ysMin.min = minYear - 1; ysMin.max = maxYear; ysMin.value = minYear - 1;
+                ysMax.min = minYear - 1; ysMax.max = maxYear; ysMax.value = maxYear;
+                updateYearSlider();
+            }
+
             applyFilters();
         }
     });
@@ -527,8 +612,21 @@ window.onload = () => {
 /* ── FILTERS ── */
 function applyFilters() {
     let data = allData;
+    
+    // 1. Filter by Status
     if (activeStatus !== 'ALL') data = data.filter(r => r.Status === activeStatus);
+    
+    // 2. Filter by Year (Chỉ áp dụng nếu đang ở Tab Sold)
+    if (activeStatus === 'Sold') {
+        if (activeYearMin !== 'ALL' || activeYearMax !== 'ALL') {
+            data = data.filter(r => r.Year >= activeYearMin && r.Year <= activeYearMax);
+        }
+    }
+    
+    // 3. Filter by Suburb
     if (selSuburb !== 'ALL') data = data.filter(r => r.Suburb === selSuburb);
+    
+    // 4. Filter by Price
     data = data.filter(r => {
         const p = r.Numeric_Price; const hasPrice = p && !isNaN(p);
         if (!hasPrice) return showWithheld;
@@ -536,6 +634,8 @@ function applyFilters() {
         if (priceMaxVal !== null && p > priceMaxVal) return false;
         return true;
     });
+    
+    // 5. Filter by Type
     if (activeType !== 'ALL') data = data.filter(r => r.Property_Type === activeType);
     
     currentFilteredData = data;
@@ -746,8 +846,8 @@ function drawSuburbVolume(subCnt) {
 function drawSuburbPrice() {
     destroyChart('suburbPrice');
     
-    // Đã thêm ĐIỀU KIỆN "e[1].count >= 1" để LỌC BỎ dữ liệu rác/ít giao dịch làm hỏng chart Lowest
-    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].median > 0 && e[1].count >= 1);
+    // Đã thêm ĐIỀU KIỆN "e[1].count >= 3" để LỌC BỎ dữ liệu rác/ít giao dịch làm hỏng chart Lowest
+    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].median > 0 && e[1].count >= 3);
     if (!entries.length) return;
     
     // Sort an toàn
@@ -802,4 +902,4 @@ function drawBeds(bDist) {
 }
 </script>
 </body>
-</html>
+</html> 
