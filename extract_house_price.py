@@ -1,8 +1,8 @@
 import os
 import json
 import time
-import random
 import pandas as pd
+import random
 import re
 import math
 from bs4 import BeautifulSoup
@@ -108,7 +108,7 @@ def save_incremental_data(new_data_list, file_path):
 # ==========================================
 # NARROWED COORDINATES TO FIT GREATER MELBOURNE (Increases scraping speed)
 LAT_NORTH, LAT_SOUTH = -37.5, -38.5
-LNG_WEST, LNG_EAST = 144.35, 145.5
+LNG_WEST, LNG_EAST = 144.35, 145.40
 lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
 lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
 
@@ -215,8 +215,12 @@ try:
                                 
                                 # 2. DETAILED METHOD CLASSIFICATION (AUCTION OR PRIVATE TREATY ONLY)
                                 tags = [str(t).lower() for t in m.get('tags', [])]
-                                status_type = str(m.get('status', {}).get('type', '')).lower()
-                                combined_text = (raw_price + " " + " ".join(tags) + " " + status_type).lower()
+                                # Capture the ENTIRE status object, saleMode string, and auction dict to guarantee we don't miss the word 'auction'
+                                status_str = json.dumps(m.get('status', {})).lower()
+                                sale_mode = str(m.get('saleMode', '')).lower()
+                                auction_info = json.dumps(m.get('auction', {})).lower()
+                                
+                                combined_text = (raw_price + " " + " ".join(tags) + " " + status_str + " " + sale_mode + " " + auction_info).lower()
                                 
                                 method = "N/A"
                                 if 'auction' in combined_text: 
