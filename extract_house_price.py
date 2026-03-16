@@ -20,37 +20,54 @@ GRID_SIZE = 14
 def parse_raw_price(raw_price):
     if not isinstance(raw_price, str) or not raw_price.strip():
         return np.nan
-    normalized = raw_price.replace(',', '').replace('–', '-').lower().strip()
-    if '$' not in normalized: return np.nan
     
-    # --- NEW SPECIFIC FIX: "$575,000k if eligible for FHOG, $565,000" ---
-    # Looks for a number, an optional 'k', the phrase "fhog", and another number.
-    if 'fhog' in normalized:
-        # Extract the very first number block found in the string before the FHOG mention
-        fhog_match = re.search(r'[\$]?(\d+\.?\d*)\s*k?\s*if.*fhog', normalized)
-        if fhog_match:
-            try:
-                # We return the raw number. If it was 575000k, we just return 575000.0
-                return float(fhog_match.group(1))
-            except ValueError:
-                pass
-    # -------------------------------------------------------------------
-
-    normalized = re.sub(r'(\d+\.?\d*|\.\d+)m', lambda m: str(float(m.group(1)) * 1000000), normalized)
-    normalized = re.sub(r'(\d+\.?\d*|\.\d+)k', lambda m: str(float(m.group(1)) * 1000), normalized)
+    normalized = raw_price.lower().strip()
+    if '$' not in normalized: 
+        return np.nan
     
-    range_match = re.search(r'[\$]?(\d+\.?\d*)\s*-\s*[\$]?(\d+\.?\d*)', normalized)
-    if range_match:
+    # 1. FIX TYPO WITH EXTRA DIGITS (e.g., 3,0000,000 -> extract 3000000)
+    # Whenever there are 4 or more digits after a ',' or '.', keep only the first 3 digits of that group
+    normalized = re.sub(r'([.,])(\d{4,})', lambda m: m.group(1) + m.group(2)[:3], normalized)
+    
+    # Normalize separators
+    normalized = normalized.replace(',', '').replace('–', '-').replace(' to ', '-')
+    
+    # 2. ONLY EXTRACT NUMBERS IMMEDIATELY FOLLOWING THE '$' SIGN (Ignore 10% deposit, years, etc.)
+    matches = re.findall(r'\$\s*(\d+\.?\d*[km]?)', normalized)
+    if not matches:
+        return np.nan
+        
+    parsed_vals = []
+    for val_str in matches:
+        mult = 1
+        if val_str.endswith('m'):
+            mult = 1000000
+            val_str = val_str[:-1]
+        elif val_str.endswith('k'):
+            # Ignore 'k' if the agent mistakenly typed something like 575000k
+            num = float(val_str[:-1])
+            if num < 1000:
+                mult = 1000
+            val_str = val_str[:-1]
+        
         try:
-            low, high = float(range_match.group(1)), float(range_match.group(2))
-            return (low + high) / 2 if low < high else low
-        except ValueError: pass
-    
-    single_match = re.search(r'[\$]?(\d+\.?\d*)', normalized)
-    if single_match:
-        try: return float(single_match.group(1))
-        except ValueError: pass
-    return np.nan
+            parsed_vals.append(float(val_str) * mult)
+        except ValueError:
+            pass
+
+    if not parsed_vals:
+        return np.nan
+        
+    # 3. HANDLE FHOG CASE
+    if 'fhog' in normalized:
+        return parsed_vals[0] # Always prioritize extracting the first number
+        
+    # 4. HANDLE PRICE RANGES (Contains a hyphen and has at least 2 extracted numbers)
+    if len(parsed_vals) >= 2 and '-' in normalized:
+        return (parsed_vals[0] + parsed_vals[1]) / 2
+        
+    # 5. DEFAULT
+    return parsed_vals[0]
 
 def calculate_distance_to_cbd(lat2, lon2):
     if pd.isna(lat2) or pd.isna(lon2): return np.nan
@@ -89,8 +106,9 @@ def save_incremental_data(new_data_list, file_path):
 # ==========================================
 # 2. BROWSER SESSION & SETUP
 # ==========================================
-LAT_NORTH, LAT_SOUTH = -37.35, -38.5
-LNG_WEST, LNG_EAST = 144.3, 145.85
+# NARROWED COORDINATES TO FIT GREATER MELBOURNE (Increases scraping speed)
+LAT_NORTH, LAT_SOUTH = -37.5, -38.5
+LNG_WEST, LNG_EAST = 144.35, 145.40
 lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
 lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
 
