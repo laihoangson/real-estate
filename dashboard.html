@@ -752,7 +752,6 @@ function renderMap(data) {
             <div class="popup-price" style="color:${color}">${p ? '$'+p.toLocaleString() : (row.Raw_Price||'Price Withheld')}</div>
             <div class="popup-specs">
                 <div class="spec"><div class="spec-l">Type</div><div class="spec-v">${row.Property_Type || 'N/A'}</div></div>
-                <div class="spec"><div class="spec-l">Method</div><div class="spec-v">${row.Method || 'N/A'}</div></div>
                 <div class="spec"><div class="spec-l">Beds</div><div class="spec-v">${row.Beds || '—'}</div></div>
                 <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${row.Baths || '—'}</div></div>
                 <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${row.Car_Spaces!=null ? row.Car_Spaces : '—'}</div></div>
