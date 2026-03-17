@@ -8,13 +8,11 @@ import math
 from bs4 import BeautifulSoup
 from curl_cffi import requests
 import numpy as np
-import concurrent.futures
 
 print("STARTING SCRAPER")
 
 FILE_NAME = 'data/melbourne_price_data.csv'
 GRID_SIZE = 14  
-MAX_WORKERS = 8 # Number of simultaneous detail page requests
 
 # ==========================================
 # 1. HELPER FUNCTIONS
@@ -79,117 +77,6 @@ def calculate_distance_to_cbd(lat2, lon2):
 
 def human_delay(min_sec=0.2, max_sec=0.8):
     time.sleep(random.uniform(min_sec, max_sec))
-
-# Detail fetcher function for ThreadPool
-def fetch_detail_method(url, session):
-    if not url or url == "N/A" or 'domain.com.au' not in url:
-        return "Private Treaty"
-    try:
-        response = session.get(url, timeout=12)
-        if response.status_code != 200:
-            return "Private Treaty"
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        page_text = soup.get_text().lower()
-        
-        if 'sold at auction' in page_text:
-            return "Auction"
-        if 'auction' in page_text and ('sold' in page_text or 'sale' in page_text):
-            return "Auction"
-            
-        return "Private Treaty"
-    except Exception:
-        return "Private Treaty"
-
-def process_listing(pid_str, item, status_label, seen_ids, session):
-    if pid_str in seen_ids:
-        return None
-
-    m = item.get('listingModel', {})
-    a = m.get('address', {})
-    f = m.get('features', {})
-    
-    street = a.get('street', 'N/A')
-    suburb = str(a.get('suburb', 'Map Area')).upper()
-    postcode = a.get('postcode', '')
-    raw_price = str(m.get('price', 'N/A'))
-    url_path = m.get('url', '')
-    lat = a.get('lat', m.get('geolocation', {}).get('latitude'))
-    lng = a.get('lng', m.get('geolocation', {}).get('longitude'))
-    
-    full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
-    if not full_address:
-        return None
-        
-    date_val = m.get('dateSold', m.get('dateListed'))
-    if not date_val: date_val = m.get('status', {}).get('date')
-    if not date_val:
-        item_str = json.dumps(item)
-        date_match = re.search(r'([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', item_str)
-        if date_match:
-            date_val = date_match.group(1)
-        else:
-            iso_match = re.search(r'"[A-Za-z]*[dD]ate[A-Za-z]*"\s*:\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})', item_str)
-            if iso_match: date_val = iso_match.group(1)
-    if not date_val: date_val = 'N/A'
-    
-    tags = [str(t).lower() for t in m.get('tags', [])]
-    status_str = json.dumps(m.get('status', {})).lower()
-    sale_mode = str(m.get('saleMode', '')).lower()
-    auction_info = json.dumps(m.get('auction', {})).lower()
-    
-    combined_text = (raw_price + " " + " ".join(tags) + " " + status_str + " " + sale_mode + " " + auction_info).lower()
-    
-    method = "N/A"
-    if 'auction' in combined_text: 
-        method = "Auction"
-    elif 'private treaty' in combined_text or 'sale' in combined_text or 'sold' in combined_text or 'under offer' in combined_text:
-        method = "Private Treaty"
-    else:
-        method = "Private Treaty"
-    
-    # Detail Page Override Logic (Only executed if status is Sold and method is Private Treaty)
-    full_url = f"https://www.domain.com.au{url_path}" if url_path else "N/A"
-    
-    if status_label == 'Sold' and method in ["Private Treaty", "N/A"]:
-        detail_method = fetch_detail_method(full_url, session)
-        if detail_method == "Auction":
-            method = "Auction"
-            print(f"      🔄 AUCTION DETECTED via detail page: {full_address}")
-    
-    raw_land_size = f.get('landSize', np.nan)
-    land_unit = str(f.get('landUnit', '')).lower()
-    try:
-        if pd.notna(raw_land_size):
-            raw_land_size = float(raw_land_size)
-            if 'ha' in land_unit or 'hectare' in land_unit:
-                raw_land_size = raw_land_size * 10000
-    except:
-        pass
-
-    record = {
-        'Property_ID': pid_str,
-        'Status': status_label, 
-        'Full_Address': full_address,
-        'Suburb': suburb,
-        'Postcode': postcode,
-        'Property_Type': f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
-        'Method': method,
-        'Date': date_val,
-        'Beds': f.get('beds', 0),
-        'Baths': f.get('baths', 0),
-        'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
-        'LandSize_sqm': raw_land_size,
-        'Propertycount': np.nan,
-        'Raw_Price': raw_price,
-        'Numeric_Price': parse_raw_price(raw_price),
-        'Latitude': lat,
-        'Longitude': lng,
-        'Distance_to_CBD_km': calculate_distance_to_cbd(lat, lng),
-        'URL': full_url,
-        'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d')
-    }
-    return record
 
 def save_incremental_data(new_data_list, file_path):
     if not new_data_list: return
@@ -288,20 +175,77 @@ try:
                         page_props = page_data.get('props', {}).get('pageProps', {}).get('componentProps', {})
                         listings = page_props.get('listingsMap', {})
                         
-                        # Use ThreadPoolExecutor to process listings concurrently
-                        futures = []
-                        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-                            for pid, item in listings.items():
-                                pid_str = str(pid)
-                                futures.append(
-                                    executor.submit(process_listing, pid_str, item, status_label, seen_ids, session)
-                                )
+                        # XỬ LÝ TRỰC TIẾP TỪNG LISTING (KHÔNG DÙNG ĐA LUỒNG NỮA)
+                        for pid, item in listings.items():
+                            pid_str = str(pid)
+                            if pid_str in seen_ids:
+                                continue
+
+                            m = item.get('listingModel', {})
+                            a = m.get('address', {})
+                            f = m.get('features', {})
                             
-                            for future in concurrent.futures.as_completed(futures):
-                                record = future.result()
-                                if record:
-                                    page_scraped_data.append(record)
-                                    seen_ids.add(record['Property_ID'])
+                            street = a.get('street', 'N/A')
+                            suburb = str(a.get('suburb', 'Map Area')).upper()
+                            postcode = a.get('postcode', '')
+                            raw_price = str(m.get('price', 'N/A'))
+                            url_path = m.get('url', '')
+                            lat = a.get('lat', m.get('geolocation', {}).get('latitude'))
+                            lng = a.get('lng', m.get('geolocation', {}).get('longitude'))
+                            
+                            full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
+                            if not full_address:
+                                continue
+                                
+                            date_val = m.get('dateSold', m.get('dateListed'))
+                            if not date_val: date_val = m.get('status', {}).get('date')
+                            if not date_val:
+                                item_str = json.dumps(item)
+                                date_match = re.search(r'([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', item_str)
+                                if date_match:
+                                    date_val = date_match.group(1)
+                                else:
+                                    iso_match = re.search(r'"[A-Za-z]*[dD]ate[A-Za-z]*"\s*:\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})', item_str)
+                                    if iso_match: date_val = iso_match.group(1)
+                            if not date_val: date_val = 'N/A'
+                            
+                            full_url = f"https://www.domain.com.au{url_path}" if url_path else "N/A"
+                            
+                            raw_land_size = f.get('landSize', np.nan)
+                            land_unit = str(f.get('landUnit', '')).lower()
+                            try:
+                                if pd.notna(raw_land_size):
+                                    raw_land_size = float(raw_land_size)
+                                    if 'ha' in land_unit or 'hectare' in land_unit:
+                                        raw_land_size = raw_land_size * 10000
+                            except:
+                                pass
+
+                            record = {
+                                'Property_ID': pid_str,
+                                'Status': status_label, 
+                                'Full_Address': full_address,
+                                'Suburb': suburb,
+                                'Postcode': postcode,
+                                'Property_Type': f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
+                                # ĐÃ XÓA TRƯỜNG METHOD
+                                'Date': date_val,
+                                'Beds': f.get('beds', 0),
+                                'Baths': f.get('baths', 0),
+                                'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
+                                'LandSize_sqm': raw_land_size,
+                                'Propertycount': np.nan,
+                                'Raw_Price': raw_price,
+                                'Numeric_Price': parse_raw_price(raw_price),
+                                'Latitude': lat,
+                                'Longitude': lng,
+                                'Distance_to_CBD_km': calculate_distance_to_cbd(lat, lng),
+                                'URL': full_url,
+                                'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d')
+                            }
+                            
+                            page_scraped_data.append(record)
+                            seen_ids.add(pid_str)
                     
                     if page_scraped_data:
                         save_incremental_data(page_scraped_data, FILE_NAME)
