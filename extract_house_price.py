@@ -10,7 +10,7 @@ from curl_cffi import requests
 import numpy as np
 import concurrent.futures
 
-print("🚀 STARTING FAST SCRAPER (FIXED + MULTI-THREADED) 🚀")
+print("STARTING SCRAPER")
 
 FILE_NAME = 'data/melbourne_price_data.csv'
 GRID_SIZE = 14  
@@ -311,4 +311,4 @@ try:
         if block_counter >= 3: break
 
 finally:
-    print("\n✅ SCRAPING COMPLETED (Auction detection now fixed via detail pages for sold properties).")
+    print("\n✅ SCRAPING COMPLETED.")
