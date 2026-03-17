@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from curl_cffi import requests
 import numpy as np
 
-print("🚀 STARTING FAST SCRAPER 🚀")
+print("🚀 STARTING FAST SCRAPER (FIXED VERSION) 🚀")
 
 FILE_NAME = 'data/melbourne_price_data.csv'
 GRID_SIZE = 14  
@@ -26,13 +26,12 @@ def parse_raw_price(raw_price):
         return np.nan
     
     # 1. FIX TYPO WITH EXTRA DIGITS (e.g., 3,0000,000 -> extract 3000000)
-    # Whenever there are 4 or more digits after a ',' or '.', keep only the first 3 digits of that group
     normalized = re.sub(r'([.,])(\d{4,})', lambda m: m.group(1) + m.group(2)[:3], normalized)
     
     # Normalize separators
     normalized = normalized.replace(',', '').replace('–', '-').replace(' to ', '-')
     
-    # 2. ONLY EXTRACT NUMBERS IMMEDIATELY FOLLOWING THE '$' SIGN (Ignore 10% deposit, years, etc.)
+    # 2. ONLY EXTRACT NUMBERS IMMEDIATELY FOLLOWING THE '$' SIGN
     matches = re.findall(r'\$\s*(\d+\.?\d*[km]?)', normalized)
     if not matches:
         return np.nan
@@ -44,7 +43,6 @@ def parse_raw_price(raw_price):
             mult = 1000000
             val_str = val_str[:-1]
         elif val_str.endswith('k'):
-            # Ignore 'k' if the agent mistakenly typed something like 575000k
             num = float(val_str[:-1])
             if num < 1000:
                 mult = 1000
@@ -58,15 +56,12 @@ def parse_raw_price(raw_price):
     if not parsed_vals:
         return np.nan
         
-    # 3. HANDLE FHOG CASE
     if 'fhog' in normalized:
-        return parsed_vals[0] # Always prioritize extracting the first number
+        return parsed_vals[0]
         
-    # 4. HANDLE PRICE RANGES (Contains a hyphen and has at least 2 extracted numbers)
     if len(parsed_vals) >= 2 and '-' in normalized:
         return (parsed_vals[0] + parsed_vals[1]) / 2
         
-    # 5. DEFAULT
     return parsed_vals[0]
 
 def calculate_distance_to_cbd(lat2, lon2):
@@ -82,6 +77,37 @@ def calculate_distance_to_cbd(lat2, lon2):
 
 def human_delay(min_sec=0.5, max_sec=1.5):
     time.sleep(random.uniform(min_sec, max_sec))
+
+def get_sale_method_from_detail(url):
+    """FIX #1: NEW FUNCTION
+    Many sold properties (like the example 2/41 Ella Grove) show 'Private Treaty' in grid JSON
+    but have a clear 'Sold at auction' red banner on the detail page.
+    We only call this for SOLD listings where JSON detection failed.
+    This is the root cause you described."""
+    if not url or url == "N/A" or 'domain.com.au' not in url:
+        return "Private Treaty"
+    
+    try:
+        human_delay(0.8, 1.8)  # Extra polite delay for detail pages
+        response = session.get(url, timeout=12)
+        if response.status_code != 200:
+            return "Private Treaty"
+        
+        soup = BeautifulSoup(response.text, 'html.parser')
+        page_text = soup.get_text().lower()
+        
+        # Exact match for the banner you showed in the screenshot
+        if 'sold at auction' in page_text:
+            return "Auction"
+        
+        # Fallback - any auction mention in sold context
+        if 'auction' in page_text and ('sold' in page_text or 'sale' in page_text):
+            return "Auction"
+        
+        return "Private Treaty"
+    
+    except Exception:
+        return "Private Treaty"
 
 def save_incremental_data(new_data_list, file_path):
     if not new_data_list: return
@@ -106,7 +132,6 @@ def save_incremental_data(new_data_list, file_path):
 # ==========================================
 # 2. BROWSER SESSION & SETUP
 # ==========================================
-# NARROWED COORDINATES TO FIT GREATER MELBOURNE (Increases scraping speed)
 LAT_NORTH, LAT_SOUTH = -37.5, -38.5
 LNG_WEST, LNG_EAST = 144.35, 145.40
 lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
@@ -198,10 +223,9 @@ try:
                                 
                                 full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
                                 
-                                # 1. DATE SOLD / DATE LISTED (BRUTE-FORCE REGEX)
+                                # 1. DATE (unchanged - already robust)
                                 date_val = m.get('dateSold', m.get('dateListed'))
                                 if not date_val: date_val = m.get('status', {}).get('date')
-                                
                                 if not date_val:
                                     item_str = json.dumps(item)
                                     date_match = re.search(r'([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', item_str)
@@ -210,12 +234,10 @@ try:
                                     else:
                                         iso_match = re.search(r'"[A-Za-z]*[dD]ate[A-Za-z]*"\s*:\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})', item_str)
                                         if iso_match: date_val = iso_match.group(1)
-                                
                                 if not date_val: date_val = 'N/A'
                                 
-                                # 2. DETAILED METHOD CLASSIFICATION (AUCTION OR PRIVATE TREATY ONLY)
+                                # 2. INITIAL METHOD FROM GRID JSON (same as before)
                                 tags = [str(t).lower() for t in m.get('tags', [])]
-                                # Capture the ENTIRE status object, saleMode string, and auction dict to guarantee we don't miss the word 'auction'
                                 status_str = json.dumps(m.get('status', {})).lower()
                                 sale_mode = str(m.get('saleMode', '')).lower()
                                 auction_info = json.dumps(m.get('auction', {})).lower()
@@ -228,10 +250,21 @@ try:
                                 elif 'private treaty' in combined_text or 'sale' in combined_text or 'sold' in combined_text or 'under offer' in combined_text:
                                     method = "Private Treaty"
                                 else:
-                                    # Fallback to Private Treaty as the default for non-auctions in Australia
                                     method = "Private Treaty"
                                 
-                                # 3. CONVERT HA TO SQM
+                                # ==========================================
+                                # FIX #2: DETAIL PAGE OVERRIDE FOR SOLD PROPERTIES
+                                # This fixes exactly the problem you showed:
+                                # Grid JSON = Private Treaty
+                                # Detail page banner = "Sold at auction 2 Jul 2025"
+                                # ==========================================
+                                if status_label == 'Sold' and method in ["Private Treaty", "N/A"]:
+                                    detail_method = get_sale_method_from_detail(f"https://www.domain.com.au{url_path}" if url_path else "N/A")
+                                    if detail_method == "Auction":
+                                        method = "Auction"
+                                        print(f"      🔄 AUCTION DETECTED via detail page: {full_address}")
+                                
+                                # 3. LAND SIZE (unchanged)
                                 raw_land_size = f.get('landSize', np.nan)
                                 land_unit = str(f.get('landUnit', '')).lower()
                                 try:
@@ -250,13 +283,13 @@ try:
                                         'Suburb': suburb,
                                         'Postcode': postcode,
                                         'Property_Type': f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
-                                        'Method': method,
+                                        'Method': method,                    # <-- NOW CORRECTLY "Auction" when needed
                                         'Date': date_val,
                                         'Beds': f.get('beds', 0),
                                         'Baths': f.get('baths', 0),
                                         'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
                                         'LandSize_sqm': raw_land_size,
-                                        'Propertycount': np.nan, # Auto updated in save_incremental_data
+                                        'Propertycount': np.nan,
                                         'Raw_Price': raw_price,
                                         'Numeric_Price': parse_raw_price(raw_price),
                                         'Latitude': lat,
@@ -277,4 +310,4 @@ try:
         if block_counter >= 3: break
 
 finally:
-    print("\n✅ SCRAPING COMPLETED.")
+    print("\n✅ SCRAPING COMPLETED")
