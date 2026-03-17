@@ -1,2 +1,2 @@
-﻿Property_ID,Status,Full_Address,Suburb,Postcode,Property_Type,Method,Date,Beds,Baths,Car_Spaces,LandSize_sqm,Propertycount,Raw_Price,Numeric_Price,Latitude,Longitude,Distance_to_CBD_km,URL,Last_Updated
-2019150028,For Sale,"910/188 Ballarat Road, FOOTSCRAY VIC 3011",FOOTSCRAY,3011,Apartment / Unit / Flat,Private Treaty,,2,2,1,0.0,319,"$530,000 - $558,000",544000.0,-37.79135,144.8907,6.83,https://www.domain.com.au/910-188-ballarat-road-footscray-vic-3011-2019150028,2026-03-14
+﻿Property_ID,Status,Full_Address,Suburb,Postcode,Property_Type,Date,Beds,Baths,Car_Spaces,LandSize_sqm,Propertycount,Raw_Price,Numeric_Price,Latitude,Longitude,Distance_to_CBD_km,URL,Last_Updated
+2019150028,For Sale,"910/188 Ballarat Road, FOOTSCRAY VIC 3011",FOOTSCRAY,3011,Apartment / Unit / Flat,,2,2,1,0.0,319,"$530,000 - $558,000",544000.0,-37.79135,144.8907,6.83,https://www.domain.com.au/910-188-ballarat-road-footscray-vic-3011-2019150028,2026-03-14
