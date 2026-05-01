@@ -27,7 +27,7 @@ jobs:
           pip install pandas requests
 
       - name: Run GeoJSON Scraper Script
-        run: python get_geojson.py
+        run: python etl/get_geojson.py
 
       - name: Commit and Push Changes
         run: |

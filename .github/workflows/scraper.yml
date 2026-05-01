@@ -1,46 +1,90 @@
-name: Melbourne Property Scraper
+name: Melbourne Property - Weekly Scrape + Enrich
 
 permissions:
   contents: write
 
 on:
-  #schedule:
-  #  - cron: "0 16 * * 0"
-  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:        
+
+env:
+  SCRAPE_FILE:  data/melbourne_price_data.csv
+  ENRICH_FILE:  data/melbourne_price_data_enriched.csv
 
 jobs:
+  # ──────────────────────────────────────────────
+  # JOB 1: Scrape domain.com.au 
+  # ──────────────────────────────────────────────
   scrape:
-
+    name: 1 - Scrape domain.com.au
     runs-on: ubuntu-latest
+    timeout-minutes: 180     
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Checkout repo
-      uses: actions/checkout@v4
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
-    - name: Setup Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
+      - name: Install Chrome (dùng cho curl_cffi impersonate)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y google-chrome-stable
 
-    - name: Install Google Chrome
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
+      - name: Run scraper
+        run: python etl/extract_house_price.py
 
-    - name: Run scraper
-      run: |
-        python extract_house_price.py
+      - name: Commit & push Scraped data
+        run: |
+          git config --global user.name "laihoangson"
+          git config --global user.email "lson21757@gmail.com"
+          git add ${{ env.SCRAPE_FILE }}
+          git diff --cached --quiet || git commit -m "Auto update property data (Scraped) [skip ci]"
+          git pull origin main --rebase
+          git push
 
-    - name: Commit updated dataset
-      run: |
-        git config --global user.name "laihoangson"
-        git config --global user.email "lson21757@gmail.com"
-        git add .
-        git commit -m "Auto update property data [skip ci]" || echo "No changes to commit"
-        git pull origin main --rebase
-        git push
+  # ──────────────────────────────────────────────
+  # JOB 2: Enrich (ABS, Crime, PTV)
+  # ──────────────────────────────────────────────
+  enrich:
+    name: 2 - Enrich with ABS / Crime / PTV
+    runs-on: ubuntu-latest
+    needs: scrape             
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout latest main
+        uses: actions/checkout@v4
+        with:
+          ref: main 
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install enrich dependencies
+        run: |
+          pip install pandas requests openpyxl tqdm
+
+      - name: Run enrichment
+        run: |
+          python etl/enrich_melbourne_data.py \
+            --input  ${{ env.SCRAPE_FILE }} \
+            --output ${{ env.ENRICH_FILE }}
+
+      - name: Commit & push Enriched data
+        run: |
+          git config --global user.name "laihoangson"
+          git config --global user.email "lson21757@gmail.com"
+          git add ${{ env.ENRICH_FILE }}
+          git diff --cached --quiet || git commit -m "Auto update property data (Enriched) [skip ci]"
+          git pull origin main --rebase
+          git push
