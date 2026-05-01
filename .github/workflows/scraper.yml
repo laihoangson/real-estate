@@ -19,7 +19,6 @@ jobs:
   scrape:
     name: 1 - Scrape domain.com.au
     runs-on: ubuntu-latest
-    timeout-minutes: 180     
 
     steps:
       - name: Checkout
