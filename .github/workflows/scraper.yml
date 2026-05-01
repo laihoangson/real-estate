@@ -1,12 +1,12 @@
-name: Melbourne Property - Weekly Scrape + Enrich
+name: Melbourne Property - Scrape + Enrich
 
 permissions:
   contents: write
 
 on:
   schedule:
-    - cron: "0 3 * * 0"
-  workflow_dispatch:        
+    - cron: "0 3 1,15 * *"
+  workflow_dispatch:       
 
 env:
   SCRAPE_FILE:  data/melbourne_price_data.csv
