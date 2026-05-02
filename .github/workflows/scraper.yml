@@ -75,7 +75,7 @@ jobs:
 
       - name: Run enrichment
         run: |
-          python etl/enrich_melbourne_data.py \
+          python etl/enrich_property_data.py \
             --input  ${{ env.SCRAPE_FILE }} \
             --output ${{ env.ENRICH_FILE }}
 
