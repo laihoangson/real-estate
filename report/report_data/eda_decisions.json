@@ -1,0 +1,98 @@
+{
+  "data_snapshot_date": "2026-05-02",
+  "land_property_types": [
+    "Development Site",
+    "Farm",
+    "Farmlet",
+    "Grazing",
+    "Livestock",
+    "Mixed Farming",
+    "New land",
+    "Specialist Farm",
+    "Vacant land"
+  ],
+  "apt_like_types": [
+    "Apartment / Unit / Flat",
+    "Block of Units",
+    "Car Space",
+    "Penthouse",
+    "Studio"
+  ],
+  "rural_large_types": [
+    "Acreage / Semi-Rural",
+    "Rural",
+    "Rural Lifestyle"
+  ],
+  "residential_dense_types": [
+    "Block of Units",
+    "Duplex",
+    "House",
+    "New Apartments / Off the Plan",
+    "New Home Designs",
+    "New House & Land",
+    "Semi-Detached",
+    "Terrace",
+    "Townhouse",
+    "Villa"
+  ],
+  "price_floor": 50000,
+  "price_ceiling": 20000000,
+  "landsize_caps_by_type": {
+    "House": 51860.0,
+    "Vacant land": 213926.0,
+    "Rural": 1956387.0,
+    "Acreage / Semi-Rural": 1330778.0,
+    "Apartment / Unit / Flat": 5414.0,
+    "Townhouse": 920.0,
+    "New land": 12048.0,
+    "Development Site": 45532.0,
+    "Farm": 842160.0,
+    "Villa": 263045.0,
+    "New House & Land": 4452.0,
+    "New Apartments / Off the Plan": 2565.0,
+    "Block of Units": 5177.0,
+    "Semi-Detached": 679.0,
+    "Rural Lifestyle": 632469.0
+  },
+  "metro_envelope": {
+    "lat": [
+      -38.6,
+      -37.4
+    ],
+    "lon": [
+      144.4,
+      145.7
+    ]
+  },
+  "target_transform": "log1p",
+  "split_strategy": "time_based",
+  "split_ratios": {
+    "train": 0.7,
+    "val": 0.15,
+    "test": 0.15
+  },
+  "inference_year": 2026,
+  "inference_month": 5,
+  "rare_property_types": [
+    "Development Site",
+    "Farm",
+    "Rural Lifestyle",
+    "Specialist Farm",
+    "Semi-Detached",
+    "Terrace",
+    "Duplex",
+    "Car Space",
+    "Penthouse",
+    "Farmlet",
+    "Mixed Farming",
+    "Grazing",
+    "Livestock"
+  ],
+  "new_build_types": [
+    "New House & Land",
+    "New Apartments / Off the Plan",
+    "New Home Designs",
+    "New land"
+  ],
+  "rationale_year_month": "Sold prices show 4-12% YoY changes and 13% peak-to-trough seasonality. Year and Month let the model learn this. At For Sale inference, current Year/Month are injected to obtain today-priced estimates."
+}
