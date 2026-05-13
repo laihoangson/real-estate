@@ -178,6 +178,21 @@ def clean_frame(d, land_caps, is_sold):
         n_drop = (~keep).sum()
         d = d[keep].copy()
         log.info(f"Sold: dropped {n_drop:,} rows with price < {cfg.PRICE_FLOOR:,} or > {cfg.PRICE_CEILING:,}")
+    else:
+        # For Sale: don't drop rows (we still want them on the map and in volume
+        # stats), but NaN-ify obviously broken prices so they're treated as
+        # "no asking price" downstream. This catches parse errors like
+        # "Contact agent for price" → $1, "POA" → $0, etc., which would
+        # otherwise create false "deals" in the Top Deals tab.
+        priced = d["Numeric_Price"].notna()
+        bad_price = priced & (~d["Numeric_Price"].between(cfg.PRICE_FLOOR, cfg.PRICE_CEILING))
+        n_bad = bad_price.sum()
+        if n_bad > 0:
+            d.loc[bad_price, "Numeric_Price"] = np.nan
+            d.loc[bad_price, "Raw_Price"]     = "Contact Agent"
+            log.info(f"For Sale: NaN-ified {n_bad:,} rows with price < {cfg.PRICE_FLOOR:,} or > {cfg.PRICE_CEILING:,}")
+        else:
+            log.info("For Sale: no rows with out-of-range prices")
 
     return d
 
