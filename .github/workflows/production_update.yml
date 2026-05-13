@@ -80,8 +80,7 @@ jobs:
           git add production/output/cleaned_data.parquet \
                   production/output/eda_decisions.json \
                   production/output/predictions_for_sale.parquet \
-                  production/output/models/ \
-                  production/output/logs/
+                  production/output/models/
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
