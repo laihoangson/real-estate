@@ -2344,7 +2344,7 @@ src: url(data:font/ttf;base64,AAEAAAARAQAABAAQR1BPUwxHs9QAADvIAAAtkEdTVUL5oPFOAA
 <section id="data-loading-initial-inspection" class="level2">
 <h2 class="anchored" data-anchor-id="data-loading-initial-inspection">1. Data Loading &amp; Initial Inspection</h2>
 <p>I read the CSV, normalize a possible BOM in the first column name, then inspect the schema. The very first thing I look at is the <code>Status</code> distribution - this confirms the two-group structure that motivates the entire analysis.</p>
-<div id="6dc1e82d" class="cell" data-execution_count="1">
+<div id="6dc1e82d" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> warnings</span>
@@ -2366,14 +2366,14 @@ src: url(data:font/ttf;base64,AAEAAAARAQAABAAQR1BPUwxHs9QAADvIAAAtkEdTVUL5oPFOAA
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="co"># To convert to html, quarto render report/eda_report.ipynb</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
-<div id="3944b2a9" class="cell" data-execution_count="2">
+<div id="3944b2a9" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Load Data</span></span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.read_csv(<span class="st">&#39;report_data/melbourne_price_data_enriched.csv&#39;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
-<div id="a4bd5c39" class="cell" data-execution_count="3">
+<div id="a4bd5c39" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Strip BOM if present (CSVs saved from Excel often carry one on the first column)</span></span>
@@ -2402,7 +2402,7 @@ Columns (27):
 </div>
 </div>
 <p>I parse <code>Date</code> into a real datetime column and extract <code>Year</code> and <code>Month</code> - these will be central features in the ML notebook because they let the model learn price inflation. I then split into <code>df_sold</code> and <code>df_forsale</code>. I also confirm my assumption that For Sale rows have no Date (it’s the defining structural difference between the two groups).</p>
-<div id="7a3e171b" class="cell" data-execution_count="4">
+<div id="7a3e171b" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Format in the file is &quot;10 Dec 2012&quot;</span></span>
@@ -2473,7 +2473,7 @@ Name: Year, dtype: float64</code></pre>
 <p>I check existence (missingness, duplicates) before validity (price availability, type sanity), because IQRs or histograms on a NaN-heavy column give misleading results.</p>
 <p>The three checks are missingness per group, duplicate Property_IDs, and Property_Type sanity. I also inspect Raw_Price for NaN-price rows to confirm whether any can be recovered. At the end of the section I remove rows identified as unrecoverable.</p>
 <p><strong>Missingness report:</strong></p>
-<div id="5c5e739f" class="cell" data-execution_count="5">
+<div id="5c5e739f" class="cell" data-execution_count="6">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Build a per-column NaN report, sorted by missing count, with both absolute and percentage figures.</span></span>
@@ -2530,7 +2530,7 @@ crime_rate_per_100k        7    0.02</code></pre>
 <li><p>87 For Sale rows have simultaneous NaNs in Property_Type, LandSize_sqm and Raw_Price. These are broken scrape records and will be removed.</p></li>
 </ul>
 <p><strong>Duplicate check</strong></p>
-<div id="4eff0458" class="cell" data-execution_count="6">
+<div id="4eff0458" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Check uniqueness of Property_ID at three levels: full dataset, within Sold, within For Sale.</span></span>
@@ -2571,7 +2571,7 @@ The duplicate For Sale Property_ID:
 <p>Zero duplicates within Sold and zero overlap between Sold and For Sale.</p>
 <p>The single For Sale duplicate (Property_ID 2020548366, RHYLL vacant land) has two rows differing in price ($630,000 vs $600,000) and Last_Updated (2026-03-17 vs 2026-05-02). The newer row reflects a price reduction and is the listing’s current state. I keep the latest and drop the older.</p>
 <p><strong>Price Check</strong></p>
-<div id="65e2172e" class="cell" data-execution_count="7">
+<div id="65e2172e" class="cell" data-execution_count="8">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Confirm that 100% of Sold NaN-prices are &quot;Price Withheld&quot;.</span></span>
@@ -2628,6 +2628,7 @@ Name: count, dtype: int64</code></pre>
 </div>
 <p>Sold side: all 10,334 NaN-price rows are “Price Withheld”. These have no label so won’t contribute to ML training, but I keep them for descriptive analysis to avoid biasing the supply-side picture.</p>
 <p>For Sale side: none of the 5,421 NaN-price rows are price ranges. Ranges like “$1,100,000 - $1,200,000” do exist in For Sale but the source parser already collapsed them into Numeric_Price as midpoints. The remaining NaN-price rows are non-numeric expressions (“Contact Agent”, “Private Sale”, “Expressions of Interest”, “Auction”). None can be turned into a number.</p>
+<p>A second class of unreliable prices is also present but not visible from the NaN report: rows where the parser produced a number but the number is implausibly small (e.g. “$1 deposit, balance on settlement” → $1, “From $1m” mis-parsed as $1, “Reserve $5”). These are addressed in Section 3 alongside the other outlier rules so the price floor is applied uniformly to both Sold and For Sale.</p>
 <p>Implications:</p>
 <ul>
 <li><p>No price-recovery step needed; Numeric_Price is as complete as the data allows.</p></li>
@@ -2635,7 +2636,7 @@ Name: count, dtype: int64</code></pre>
 <li><p>Casing inconsistency in Raw_Price (“Contact Agent” vs “CONTACT AGENT” etc.) affects only the text column, not Numeric_Price, so I don’t normalize it.</p></li>
 </ul>
 <p><strong>Property Type sanity</strong></p>
-<div id="130a1630" class="cell" data-execution_count="8">
+<div id="130a1630" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Property_Type frequencies per group, plus a long-tail report on rare types.</span></span>
@@ -2726,7 +2727,8 @@ Name: count, dtype: int64</code></pre>
 <li><p>The older copy of the duplicate For Sale Property_ID 2020548366. I keep only the row with the latest Last_Updated.</p></li>
 </ol>
 <p>I apply these removals now so that every section that follows operates on the same cleaned df_sold and df_forsale frames. Outlier-driven removals are deliberately deferred to Section 3.</p>
-<div id="3a06e275" class="cell" data-execution_count="9">
+<p>A separate parser-error class is also addressed in Section 3: For Sale rows where Numeric_Price falls outside the [$50k, $20M] range. These are almost always upstream parsing failures on non-numeric Raw_Price values (e.g. “$1 deposit, balance on settlement”, “From $1m” mis-parsed as $1, “Reserve $5”). They cannot be turned into real asking prices, but they retain valid location and physical features, so they are NaN-ified rather than dropped. This preserves their value for descriptive supply-side analysis while preventing fake “Good Deal” signals downstream.</p>
+<div id="3a06e275" class="cell" data-execution_count="10">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb15"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1. Drop Sold rows with a missing parsed Date (cannot derive Year/Month for time-aware ML).</span></span>
@@ -2778,7 +2780,7 @@ Final sizes after Section 2 cleaning:
 <p>I examine four families of outliers: price (Sold only), physical attributes (Beds, Baths, Car_Spaces), LandSize, and geography. I also build an <code>is_land</code> flag because land properties have fundamentally different price dynamics and must be treated separately from residential properties.</p>
 <p><strong>Build the <code>is_land</code> flag</strong></p>
 <p>A property is land if its Property_Type is one of the land categories (Vacant land, New land, Development Site, Farm, Farmlet, Grazing, Livestock, Mixed Farming, Specialist Farm), OR if it has zero rooms and positive land area (which catches mislabeled rows). The flag is added to both df_sold and df_forsale because outlier rules differ for land vs residential.</p>
-<div id="2df34af4" class="cell" data-execution_count="10">
+<div id="2df34af4" class="cell" data-execution_count="11">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb17"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Property types that are explicitly land-related.</span></span>
@@ -2834,7 +2836,7 @@ Name: count, dtype: int64</code></pre>
 </div>
 <p><strong>Price outliers (Sold only)</strong></p>
 <p>Only Sold has reliable transaction prices. I plot raw and log10 scale to confirm the heavy right tail and motivate the log-transform of the ML target. I then inspect global percentiles to set hard floor/ceiling bounds.</p>
-<div id="eefd6190" class="cell" data-execution_count="11">
+<div id="eefd6190" class="cell" data-execution_count="12">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb19"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a>sold_priced <span class="op">=</span> df_sold.dropna(subset<span class="op">=</span>[<span class="st">&quot;Numeric_Price&quot;</span>]).copy()</span>
@@ -2878,7 +2880,7 @@ Name: Numeric_Price, dtype: float64</code></pre>
 <p>I set hard bounds at $50,000 floor and $20,000,000 ceiling. This removes only ~100-150 rows in the deep tails, none of which are recoverable.</p>
 <p><strong>Physical attribute outliers</strong></p>
 <p>Beds, Baths, Car_Spaces should follow human-scale property logic. Values above 10 are almost always typos. I count suspicious patterns; cleaning is applied in one batch at the end of Section 3.</p>
-<div id="be73b77a" class="cell" data-execution_count="12">
+<div id="be73b77a" class="cell" data-execution_count="13">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb21"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb21-1"><a href="#cb21-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Distribution and tail counts on Beds, Baths, Car_Spaces in the Sold set.</span></span>
@@ -2956,7 +2958,7 @@ Car_Spaces &gt; 10:                           99</code></pre>
 <p>Beds and Car_Spaces both contain absurd values (Beds max=30, Car_Spaces max=11,951). I cap each at 10. The 227 Sold rows with Beds=0 on non-land are dominated by House (102) and Rural (39) - these will be set to NaN for ML imputation rather than kept as zero, because zero is not a plausible value for a house. The 4 Baths &gt; Beds*2 cases are negligible and will be capped.</p>
 <p><strong>LandSize outliers</strong></p>
 <p>LandSize has two failure modes. Zero LandSize is normal for Apartment-like and Townhouse types (they typically share or have no individual land), but anomalous for House, Villa, Rural, Acreage, etc. Per-type analysis is needed because acreage can legitimately have hundreds of thousands of sqm while a House should not exceed roughly 50,000 sqm.</p>
-<div id="028df093" class="cell" data-execution_count="13">
+<div id="028df093" class="cell" data-execution_count="14">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb23"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb23-1"><a href="#cb23-1" aria-hidden="true" tabindex="-1"></a><span class="co"># LandSize percentiles to inform the cap level.</span></span>
@@ -3025,7 +3027,7 @@ Acreage / Semi-Rural   CURLEWIS     1351700.0            NaN</code></pre>
 <li>Longitude: 144.4 to 145.7</li>
 </ul>
 <p>Properties outside this envelope are not necessarily errors. Domain.com.au lists genuinely regional properties (Geelong, Ballarat, Mornington Peninsula extensions, etc.) that are legitimately outside the inner metro box. I therefore flag rather than drop. The flag (<code>out_of_metro</code>) lets downstream geospatial visualizations focus on the metro core while still keeping regional rows in the modeling set.</p>
-<div id="86c95383" class="cell" data-execution_count="14">
+<div id="86c95383" class="cell" data-execution_count="15">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb25"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb25-1"><a href="#cb25-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Count and inspect rows outside the Melbourne metro envelope.</span></span>
@@ -3064,7 +3066,7 @@ MYRNIONG      3341 -37.577910  144.35915               59.25</code></pre>
 </div>
 </div>
 <p><strong>Apply outlier handling</strong></p>
-<p>Rules applied to both Sold and For Sale (so inference data matches training shape). The price floor/ceiling applies only to Sold because For Sale has no transaction price.</p>
+<p>Rules applied to both Sold and For Sale (so inference data matches training shape). Price-range rules differ between groups: Sold uses transaction prices and rows outside [$50k, $20M] are dropped because they cannot contribute to ML training. For Sale uses asking prices and rows outside the same range are NaN-ified rather than dropped, because the location/physical features are still valid inference inputs even when the asking price is unparseable.</p>
 <table class="caption-top table">
 <colgroup>
 <col style="width: 50%">
@@ -3078,45 +3080,50 @@ MYRNIONG      3341 -37.577910  144.35915               59.25</code></pre>
 </thead>
 <tbody>
 <tr class="odd">
-<td>Price &lt; $50k or &gt; $20M (Sold)</td>
+<td>Sold: Numeric_Price &lt; $50k or &gt; $20M</td>
 <td>Drop</td>
 </tr>
 <tr class="even">
+<td>For Sale: Numeric_Price &lt; $50k or &gt; $20M</td>
+<td>Set Numeric_Price to NaN, mark Raw_Price as “Contact Agent”</td>
+</tr>
+<tr class="odd">
 <td>Beds &gt; 10</td>
 <td>Cap at 10</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Baths &gt; Beds*2 when Beds &gt; 0</td>
 <td>Cap at Beds*2, then cap absolute at 10</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>Car_Spaces &gt; 10</td>
 <td>Cap at 10</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Beds = 0 AND not land</td>
 <td>Set Beds and Baths to NaN for ML imputation</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>LandSize = 0 on non-apartment, non-land</td>
 <td>Set to NaN for ML imputation</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>LandSize &gt; per-type cap (99% for House/Townhouse/Villa; 99.9% for Acreage/Rural/Farm)</td>
 <td>Cap</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td>Lat/Lng outside metro envelope</td>
 <td>Flag <code>out_of_metro</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>Property_Type = NaN</td>
 <td>Set to “Unknown”</td>
 </tr>
 </tbody>
 </table>
+<p>The For Sale price floor catches parser errors like “$1 deposit, balance on settlement” → $1, “From $1m” mis-parsed as $1, and “Reserve $5, contact agent” → $5. Setting these to NaN is consistent with the cell-15 finding that non-numeric Raw_Price expressions (“Contact Agent”, “Auction”, etc.) are already represented as Numeric_Price = NaN; this just extends the same treatment to listings where the parser produced a number but the number is implausible.</p>
 <p>Per-type LandSize medians and caps are computed once on the Sold side (training-side parameters; For Sale must not influence them) and then applied to both groups.</p>
-<div id="ddc23286" class="cell" data-execution_count="15">
+<div id="ddc23286" class="cell" data-execution_count="16">
 <details class="code-fold">
 <summary>Code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb27"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb27-1"><a href="#cb27-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Per-Property_Type LandSize CAPS only, computed from Sold positive-LandSize rows.</span></span>
@@ -3176,36 +3183,52 @@ MYRNIONG      3341 -37.577910  144.35915               59.25</code></pre>
 <span id="cb27-55"><a href="#cb27-55" aria-hidden="true" tabindex="-1"></a>                        (<span class="op">~</span>d[<span class="st">&quot;Longitude&quot;</span>].between(LON_MIN, LON_MAX))).astype(<span class="bu">int</span>)</span>
 <span id="cb27-56"><a href="#cb27-56" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb27-57"><a href="#cb27-57" aria-hidden="true" tabindex="-1"></a>    <span class="cf">if</span> is_sold:</span>
-<span id="cb27-58"><a href="#cb27-58" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Drop unrecoverable price extremes; keep Price Withheld (NaN) rows for descriptive use.</span></span>
+<span id="cb27-58"><a href="#cb27-58" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Sold: drop unrecoverable price extremes; keep Price Withheld (NaN) rows for descriptive use.</span></span>
 <span id="cb27-59"><a href="#cb27-59" aria-hidden="true" tabindex="-1"></a>        priced <span class="op">=</span> d[<span class="st">&quot;Numeric_Price&quot;</span>].notna()</span>
 <span id="cb27-60"><a href="#cb27-60" aria-hidden="true" tabindex="-1"></a>        keep <span class="op">=</span> (<span class="op">~</span>priced) <span class="op">|</span> (d[<span class="st">&quot;Numeric_Price&quot;</span>].between(<span class="dv">50_000</span>, <span class="dv">20_000_000</span>))</span>
 <span id="cb27-61"><a href="#cb27-61" aria-hidden="true" tabindex="-1"></a>        before <span class="op">=</span> <span class="bu">len</span>(d)</span>
 <span id="cb27-62"><a href="#cb27-62" aria-hidden="true" tabindex="-1"></a>        d <span class="op">=</span> d[keep].copy()</span>
 <span id="cb27-63"><a href="#cb27-63" aria-hidden="true" tabindex="-1"></a>        <span class="bu">print</span>(<span class="ss">f&quot;  Sold: dropped </span><span class="sc">{</span>before <span class="op">-</span> <span class="bu">len</span>(d)<span class="sc">:,}</span><span class="ss"> rows with price &lt; 50k or &gt; 20M.&quot;</span>)</span>
-<span id="cb27-64"><a href="#cb27-64" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-65"><a href="#cb27-65" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> d</span>
-<span id="cb27-66"><a href="#cb27-66" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-67"><a href="#cb27-67" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st">Cleaning Sold:&quot;</span>)</span>
-<span id="cb27-68"><a href="#cb27-68" aria-hidden="true" tabindex="-1"></a>df_sold <span class="op">=</span> clean_frame(df_sold, is_sold<span class="op">=</span><span class="va">True</span>)</span>
-<span id="cb27-69"><a href="#cb27-69" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Final size: </span><span class="sc">{</span><span class="bu">len</span>(df_sold)<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-70"><a href="#cb27-70" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-71"><a href="#cb27-71" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st">Cleaning For Sale:&quot;</span>)</span>
-<span id="cb27-72"><a href="#cb27-72" aria-hidden="true" tabindex="-1"></a>df_forsale <span class="op">=</span> clean_frame(df_forsale, is_sold<span class="op">=</span><span class="va">False</span>)</span>
-<span id="cb27-73"><a href="#cb27-73" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Final size: </span><span class="sc">{</span><span class="bu">len</span>(df_forsale)<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-74"><a href="#cb27-74" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb27-75"><a href="#cb27-75" aria-hidden="true" tabindex="-1"></a><span class="co"># Post-clean sanity checks.</span></span>
-<span id="cb27-76"><a href="#cb27-76" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st">Post-clean sanity:&quot;</span>)</span>
-<span id="cb27-77"><a href="#cb27-77" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Beds max:                  </span><span class="sc">{</span>df_sold[<span class="st">&#39;Beds&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-78"><a href="#cb27-78" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Baths max:                 </span><span class="sc">{</span>df_sold[<span class="st">&#39;Baths&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-79"><a href="#cb27-79" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Car_Spaces max:            </span><span class="sc">{</span>df_sold[<span class="st">&#39;Car_Spaces&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-80"><a href="#cb27-80" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold LandSize max:              </span><span class="sc">{</span>df_sold[<span class="st">&#39;LandSize_sqm&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:,.0f}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-81"><a href="#cb27-81" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold price range:               </span><span class="sc">{</span>df_sold[<span class="st">&#39;Numeric_Price&#39;</span>]<span class="sc">.</span><span class="bu">min</span>()<span class="sc">:,.0f}</span><span class="ss"> - &quot;</span></span>
-<span id="cb27-82"><a href="#cb27-82" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f&quot;</span><span class="sc">{</span>df_sold[<span class="st">&#39;Numeric_Price&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:,.0f}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-83"><a href="#cb27-83" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Beds NaN (rooms-less):     </span><span class="sc">{</span>df_sold[<span class="st">&#39;Beds&#39;</span>]<span class="sc">.</span>isna()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-84"><a href="#cb27-84" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold LandSize NaN (was 0):      </span><span class="sc">{</span>df_sold[<span class="st">&#39;LandSize_sqm&#39;</span>]<span class="sc">.</span>isna()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-85"><a href="#cb27-85" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  For Sale LandSize NaN (was 0):  </span><span class="sc">{</span>df_forsale[<span class="st">&#39;LandSize_sqm&#39;</span>]<span class="sc">.</span>isna()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
-<span id="cb27-86"><a href="#cb27-86" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  out_of_metro Sold:              </span><span class="sc">{</span>df_sold[<span class="st">&#39;out_of_metro&#39;</span>]<span class="sc">.</span>mean()<span class="op">*</span><span class="dv">100</span><span class="sc">:.1f}</span><span class="ss">%&quot;</span>)</span>
-<span id="cb27-87"><a href="#cb27-87" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  out_of_metro For Sale:          </span><span class="sc">{</span>df_forsale[<span class="st">&#39;out_of_metro&#39;</span>]<span class="sc">.</span>mean()<span class="op">*</span><span class="dv">100</span><span class="sc">:.1f}</span><span class="ss">%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<span id="cb27-64"><a href="#cb27-64" aria-hidden="true" tabindex="-1"></a>    <span class="cf">else</span>:</span>
+<span id="cb27-65"><a href="#cb27-65" aria-hidden="true" tabindex="-1"></a>        <span class="co"># For Sale: NaN-ify implausible asking prices instead of dropping the row.</span></span>
+<span id="cb27-66"><a href="#cb27-66" aria-hidden="true" tabindex="-1"></a>        <span class="co"># These are upstream parser errors on non-numeric Raw_Price (&quot;$1 deposit&quot;,</span></span>
+<span id="cb27-67"><a href="#cb27-67" aria-hidden="true" tabindex="-1"></a>        <span class="co"># &quot;From $1m&quot; mis-parsed as $1, &quot;Reserve $5&quot;, etc.). The row&#39;s location and</span></span>
+<span id="cb27-68"><a href="#cb27-68" aria-hidden="true" tabindex="-1"></a>        <span class="co"># physical features are still valid inference inputs; only the asking price</span></span>
+<span id="cb27-69"><a href="#cb27-69" aria-hidden="true" tabindex="-1"></a>        <span class="co"># is unrecoverable. We mark Raw_Price as &quot;Contact Agent&quot; so downstream</span></span>
+<span id="cb27-70"><a href="#cb27-70" aria-hidden="true" tabindex="-1"></a>        <span class="co"># consumers treat these uniformly with the existing non-numeric rows.</span></span>
+<span id="cb27-71"><a href="#cb27-71" aria-hidden="true" tabindex="-1"></a>        priced <span class="op">=</span> d[<span class="st">&quot;Numeric_Price&quot;</span>].notna()</span>
+<span id="cb27-72"><a href="#cb27-72" aria-hidden="true" tabindex="-1"></a>        bad_price <span class="op">=</span> priced <span class="op">&amp;</span> (<span class="op">~</span>d[<span class="st">&quot;Numeric_Price&quot;</span>].between(<span class="dv">50_000</span>, <span class="dv">20_000_000</span>))</span>
+<span id="cb27-73"><a href="#cb27-73" aria-hidden="true" tabindex="-1"></a>        n_bad <span class="op">=</span> bad_price.<span class="bu">sum</span>()</span>
+<span id="cb27-74"><a href="#cb27-74" aria-hidden="true" tabindex="-1"></a>        <span class="cf">if</span> n_bad <span class="op">&gt;</span> <span class="dv">0</span>:</span>
+<span id="cb27-75"><a href="#cb27-75" aria-hidden="true" tabindex="-1"></a>            d.loc[bad_price, <span class="st">&quot;Numeric_Price&quot;</span>] <span class="op">=</span> np.nan</span>
+<span id="cb27-76"><a href="#cb27-76" aria-hidden="true" tabindex="-1"></a>            d.loc[bad_price, <span class="st">&quot;Raw_Price&quot;</span>]     <span class="op">=</span> <span class="st">&quot;Contact Agent&quot;</span></span>
+<span id="cb27-77"><a href="#cb27-77" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="ss">f&quot;  For Sale: NaN-ified </span><span class="sc">{</span>n_bad<span class="sc">:,}</span><span class="ss"> rows with parser-error prices (&lt; 50k or &gt; 20M).&quot;</span>)</span>
+<span id="cb27-78"><a href="#cb27-78" aria-hidden="true" tabindex="-1"></a>        <span class="cf">else</span>:</span>
+<span id="cb27-79"><a href="#cb27-79" aria-hidden="true" tabindex="-1"></a>            <span class="bu">print</span>(<span class="st">&quot;  For Sale: no rows with out-of-range prices.&quot;</span>)</span>
+<span id="cb27-80"><a href="#cb27-80" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-81"><a href="#cb27-81" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> d</span>
+<span id="cb27-82"><a href="#cb27-82" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-83"><a href="#cb27-83" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st">Cleaning Sold:&quot;</span>)</span>
+<span id="cb27-84"><a href="#cb27-84" aria-hidden="true" tabindex="-1"></a>df_sold <span class="op">=</span> clean_frame(df_sold, is_sold<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb27-85"><a href="#cb27-85" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Final size: </span><span class="sc">{</span><span class="bu">len</span>(df_sold)<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-86"><a href="#cb27-86" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-87"><a href="#cb27-87" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st">Cleaning For Sale:&quot;</span>)</span>
+<span id="cb27-88"><a href="#cb27-88" aria-hidden="true" tabindex="-1"></a>df_forsale <span class="op">=</span> clean_frame(df_forsale, is_sold<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb27-89"><a href="#cb27-89" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Final size: </span><span class="sc">{</span><span class="bu">len</span>(df_forsale)<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-90"><a href="#cb27-90" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb27-91"><a href="#cb27-91" aria-hidden="true" tabindex="-1"></a><span class="co"># Post-clean sanity checks.</span></span>
+<span id="cb27-92"><a href="#cb27-92" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">&quot;</span><span class="ch">\n</span><span class="st">Post-clean sanity:&quot;</span>)</span>
+<span id="cb27-93"><a href="#cb27-93" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Beds max:                  </span><span class="sc">{</span>df_sold[<span class="st">&#39;Beds&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-94"><a href="#cb27-94" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Baths max:                 </span><span class="sc">{</span>df_sold[<span class="st">&#39;Baths&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-95"><a href="#cb27-95" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Car_Spaces max:            </span><span class="sc">{</span>df_sold[<span class="st">&#39;Car_Spaces&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-96"><a href="#cb27-96" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold LandSize max:              </span><span class="sc">{</span>df_sold[<span class="st">&#39;LandSize_sqm&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:,.0f}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-97"><a href="#cb27-97" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold price range:               </span><span class="sc">{</span>df_sold[<span class="st">&#39;Numeric_Price&#39;</span>]<span class="sc">.</span><span class="bu">min</span>()<span class="sc">:,.0f}</span><span class="ss"> - &quot;</span></span>
+<span id="cb27-98"><a href="#cb27-98" aria-hidden="true" tabindex="-1"></a>      <span class="ss">f&quot;</span><span class="sc">{</span>df_sold[<span class="st">&#39;Numeric_Price&#39;</span>]<span class="sc">.</span><span class="bu">max</span>()<span class="sc">:,.0f}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-99"><a href="#cb27-99" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold Beds NaN (rooms-less):     </span><span class="sc">{</span>df_sold[<span class="st">&#39;Beds&#39;</span>]<span class="sc">.</span>isna()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-100"><a href="#cb27-100" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  Sold LandSize NaN (was 0):      </span><span class="sc">{</span>df_sold[<span class="st">&#39;LandSize_sqm&#39;</span>]<span class="sc">.</span>isna()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-101"><a href="#cb27-101" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  For Sale LandSize NaN (was 0):  </span><span class="sc">{</span>df_forsale[<span class="st">&#39;LandSize_sqm&#39;</span>]<span class="sc">.</span>isna()<span class="sc">.</span><span class="bu">sum</span>()<span class="sc">:,}</span><span class="ss">&quot;</span>)</span>
+<span id="cb27-102"><a href="#cb27-102" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  out_of_metro Sold:              </span><span class="sc">{</span>df_sold[<span class="st">&#39;out_of_metro&#39;</span>]<span class="sc">.</span>mean()<span class="op">*</span><span class="dv">100</span><span class="sc">:.1f}</span><span class="ss">%&quot;</span>)</span>
+<span id="cb27-103"><a href="#cb27-103" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="ss">f&quot;  out_of_metro For Sale:          </span><span class="sc">{</span>df_forsale[<span class="st">&#39;out_of_metro&#39;</span>]<span class="sc">.</span>mean()<span class="op">*</span><span class="dv">100</span><span class="sc">:.1f}</span><span class="ss">%&quot;</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>Per-Property_Type LandSize caps (top 10 by cap value):
@@ -3225,6 +3248,7 @@ Cleaning Sold:
   Final size: 124,820
 
 Cleaning For Sale:
+  For Sale: NaN-ified 63 rows with parser-error prices (&lt; 50k or &gt; 20M).
   Final size: 38,419
 
 Post-clean sanity:
