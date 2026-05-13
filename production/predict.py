@@ -158,7 +158,8 @@ def main():
         "Raw_Price", "Numeric_Price",
         "Predicted_Price", "Predicted_Price_Lower", "Predicted_Price_Upper",
         "Interval_Width_Pct", "Deal_Signal",
-        "is_land", "out_of_metro", "is_new_build",
+        "is_land", "out_of_metro", "is_new_build", "abs_median_age",
+        "abs_median_income_weekly", "crime_rate_per_100k", "dist_nearest_train_km",
         "Last_Updated", "URL",
     ]
     # Defensive: drop cols that might be missing.

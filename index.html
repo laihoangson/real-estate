@@ -19,7 +19,7 @@
     }
 
     html, body {
-      overflow-x: hidden !important; /* Fix mobile horizontal scroll */
+      overflow-x: hidden !important;
       width: 100%;
     }
 
@@ -31,7 +31,6 @@
       position: relative;
     }
 
-    /* Animated Background Orbs */
     .glow-orb {
       position: fixed;
       border-radius: 50%;
@@ -63,7 +62,7 @@
     }
 
     .main-title {
-      font-size: clamp(2.2rem, 6vw, 4rem); /* Responsive font size */
+      font-size: clamp(2.2rem, 6vw, 4rem);
       font-weight: 800;
       letter-spacing: -0.02em;
       background: linear-gradient(135deg, #1e3a8a 0%, #0ea5e9 50%, #10b981 100%);
@@ -86,7 +85,7 @@
     color: #475569;
 
     display: flex;
-    flex-direction: column;   /* thêm */
+    flex-direction: column;
     align-items: center;
     justify-content: center;
 
@@ -161,7 +160,6 @@
       box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     }
 
-    /* Glassmorphism Highlight Cards */
     .highlights-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -259,7 +257,6 @@
       box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
     }
 
-    /* Pipeline list */
     .pipeline-list {
       list-style: none;
       margin-top: 1.5rem;
@@ -368,7 +365,6 @@
       font-weight: 700;
     }
 
-    /* Mobile Optimizations */
     @media (max-width: 640px) {
       .container {
         padding: 1.5rem 1rem;
@@ -420,10 +416,14 @@
           proximity-to-transport features, then trains an <strong>XGBoost</strong> model to predict prices for
           For Sale listings.
         </p>
-        <p style="color: #475569; font-size: 0.95rem;">
+        <p style="color: #475569; font-size: 0.95rem; margin-bottom: 1rem;">
           <i class="fas fa-sync-alt" style="margin-right: 0.4rem; color: #3b82f6;"></i>
           Data snapshot refreshed every Sunday at 9:00 AM Melbourne time. Predictions reflect
           the current market level by injecting today's <code>Year</code> and <code>Month</code> at inference.
+        </p>
+        <p style="color: #475569; font-size: 0.95rem;">
+          <i class="fas fa-bolt" style="margin-right: 0.4rem; color: #f59e0b;"></i>
+          The dashboard runs the XGBoost model <strong>directly in the browser</strong> via ONNX Runtime Web, so on-demand price estimates are instant and entirely client-side.
         </p>
       </div>
       
@@ -432,9 +432,9 @@
         <span class="badge"><i class="fas fa-chart-line" style="color: #10b981;"></i> XGBoost</span>
         <span class="badge"><i class="fas fa-brain" style="color: #8b5cf6;"></i> scikit-learn</span>
         <span class="badge"><i class="fas fa-project-diagram" style="color: #f59e0b;"></i> SHAP</span>
-        <span class="badge"><i class="fas fa-water" style="color: #ef4444;"></i> Streamlit</span>
-        <span class="badge"><i class="fas fa-chart-bar" style="color: #6366f1;"></i> Plotly</span>
-        <span class="badge"><i class="fas fa-map-marked-alt" style="color: #14b8a6;"></i> Folium</span>
+        <span class="badge"><i class="fas fa-microchip" style="color: #ef4444;"></i> ONNX Runtime</span>
+        <span class="badge"><i class="fas fa-map-marked-alt" style="color: #14b8a6;"></i> Leaflet</span>
+        <span class="badge"><i class="fas fa-chart-bar" style="color: #6366f1;"></i> Chart.js</span>
         <span class="badge"><i class="fab fa-github" style="color: #0f172a;"></i> GitHub Actions</span>
       </div>
     </section>
@@ -442,10 +442,10 @@
     <section>
       <h2 data-aos="fade-right"><i class="fas fa-star"></i> Highlights</h2>
       <div class="highlights-grid">
-        <a class="highlight-card" href="https://melbourne-property.streamlit.app/" target="_blank" rel="noopener" data-aos="fade-up" data-aos-delay="100">
+        <a class="highlight-card" href="dashboard.html" data-aos="fade-up" data-aos-delay="100">
           <div class="card-icon"><i class="fas fa-home"></i></div>
           <h3>Live Dashboard</h3>
-          <p>Interactive Streamlit app with filters, map, listings table, and on-demand price prediction.</p>
+          <p>Interactive map with 38k For Sale listings, suburb choropleth, filters, charts, and an in-browser ONNX prediction tab.</p>
           <span class="card-badge"><i class="fas fa-external-link-alt"></i> Explore now</span>
         </a>
         <a class="highlight-card" href="report/eda_report.html" data-aos="fade-up" data-aos-delay="200">
@@ -486,7 +486,7 @@
         </li>
         <li data-aos="fade-up" data-aos-delay="250">
           <i class="fas fa-microchip"></i>
-          <span><strong>Training</strong> (<code>production/train_pipeline.py</code>): time-based 70/15/15 split, XGBoost with locked hyperparameters, quantile models for prediction intervals.</span>
+          <span><strong>Training</strong> (<code>production/train_pipeline.py</code>): time-based 70/15/15 split, XGBoost with locked hyperparameters, quantile models for prediction intervals. Exports <code>.pkl</code> and <code>.onnx</code> for browser inference.</span>
         </li>
         <li data-aos="fade-up" data-aos-delay="300">
           <i class="fas fa-bullseye"></i>
@@ -509,10 +509,10 @@
   <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
   <script>
     AOS.init({
-      once: true, // Chạy animation 1 lần khi cuộn tới
-      offset: 50, // Bắt đầu chạy khi đối tượng cách đáy màn hình 50px
-      duration: 800, // Tốc độ chạy (ms)
-      easing: 'ease-out-cubic' // Gia tốc chuyển động
+      once: true,
+      offset: 50,
+      duration: 800,
+      easing: 'ease-out-cubic'
     });
   </script>
 </body>

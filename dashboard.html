@@ -1,175 +1,250 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Melbourne Market Insight</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <style>
-        :root {
-            --bg: #f4f6fb; --surface: #ffffff; --surface2: #f0f2f8;
-            --border: rgba(0,0,0,0.07); --border-hover: rgba(0,0,0,0.14);
-            --text: #1a1d27; --text-muted: #7c8499; --text-dim: #4a5168;
-            --accent: #2563eb; --accent2: #f5f6f9; --accent-light: rgba(37,99,235,0.08);
-            --emerald: #059669; --emerald-light: rgba(5,150,105,0.08);
-            --amber: #d97706; --rose: #e11d48; --violet: #7c3aed;
-            --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-            --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
-            /* range colors */
-            --c0: #059669; --c1: #2563eb; --c2: #d97706; --c3: #e11d48; --cw: #94a3b8;
-        }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; overflow-x: hidden; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Melbourne Market Insight</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,300&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
-        /* ── HEADER ── */
-        .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 32px 0 28px; position: relative; overflow: hidden; }
-        .header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%); pointer-events: none; }
-        .header-inner { max-width: 1440px; margin: 0 auto; padding: 0 40px; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
-        .header-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
-        .header-eyebrow::before { content: ''; display: block; width: 18px; height: 2px; background: var(--accent); border-radius: 2px; }
-        .header-title { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 3vw, 2.8rem); line-height: 1.1; color: var(--text); font-weight: 400; }
-        .header-title em { font-style: italic; color: var(--accent); }
-        .header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-        .live-badge { display: flex; align-items: center; gap: 7px; background: var(--emerald-light); border: 1px solid rgba(5,150,105,0.18); color: var(--emerald); padding: 6px 13px; border-radius: 100px; font-size: 11.5px; font-weight: 600; }
-        .live-dot { width: 6px; height: 6px; background: var(--emerald); border-radius: 50%; animation: livePulse 2s infinite; }
-        @keyframes livePulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
-        .result-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-light); border: 1px solid rgba(37,99,235,0.2); color: var(--accent); padding: 6px 13px; border-radius: 100px; font-size: 12px; font-weight: 600; }
+<style>
+:root {
+    --bg: #f4f6fb; --surface: #ffffff; --surface2: #f0f2f8;
+    --border: rgba(0,0,0,0.07); --border-hover: rgba(0,0,0,0.14);
+    --text: #1a1d27; --text-muted: #7c8499; --text-dim: #4a5168;
+    --accent: #2563eb; --accent2: #f5f6f9; --accent-light: rgba(37,99,235,0.08);
+    --emerald: #059669; --emerald-light: rgba(5,150,105,0.08);
+    --amber: #d97706; --amber-light: rgba(217,119,6,0.08);
+    --rose: #e11d48; --rose-light: rgba(225,29,72,0.08);
+    --violet: #7c3aed; --violet-light: rgba(124,58,237,0.08);
+    --slate: #94a3b8;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--text); min-height: 100vh; overflow-x: hidden; }
 
-        /* ── MAIN ── */
-        .main { max-width: 1440px; margin: 0 auto; padding: 28px 40px 60px; }
+/* HEADER */
+.header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 32px 0 28px; position: relative; overflow: hidden; }
+.header::before { content: ''; position: absolute; top: -60px; right: -60px; width: 320px; height: 320px; background: radial-gradient(circle, rgba(37,99,235,0.06) 0%, transparent 70%); pointer-events: none; }
+.header-inner { max-width: 1440px; margin: 0 auto; padding: 0 40px; display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+.header-eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.header-eyebrow::before { content: ''; display: block; width: 18px; height: 2px; background: var(--accent); border-radius: 2px; }
+.header-title { font-family: 'DM Serif Display', serif; font-size: clamp(1.8rem, 3vw, 2.8rem); line-height: 1.1; color: var(--text); font-weight: 400; }
+.header-title em { font-style: italic; color: var(--accent); }
+.header-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.live-badge { display: flex; align-items: center; gap: 7px; background: var(--emerald-light); border: 1px solid rgba(5,150,105,0.18); color: var(--emerald); padding: 6px 13px; border-radius: 100px; font-size: 11.5px; font-weight: 600; }
+.live-dot { width: 6px; height: 6px; background: var(--emerald); border-radius: 50%; animation: livePulse 2s infinite; }
+@keyframes livePulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
+.result-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-light); border: 1px solid rgba(37,99,235,0.2); color: var(--accent); padding: 6px 13px; border-radius: 100px; font-size: 12px; font-weight: 600; }
 
-        /* ── TABS ── */
-        .status-tabs { display: flex; gap: 10px; margin-bottom: 22px; }
-        .tab-btn { padding: 10px 24px; font-size: 13.5px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; color: var(--text-muted); cursor: pointer; transition: all 0.2s ease; box-shadow: var(--shadow-sm); }
-        .tab-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
+.main { max-width: 1440px; margin: 0 auto; padding: 28px 40px 60px; }
 
-        /* ── STATS ── */
-        .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
-        .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 22px 18px; position: relative; overflow: hidden; transition: border-color .2s, box-shadow .2s, transform .2s; box-shadow: var(--shadow-sm); animation: fadeUp .4s ease both; }
-        .stat-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--bar-color, transparent); opacity: 0.7; }
-        .stat-card:nth-child(1){animation-delay:.05s;--bar-color:var(--accent);}
-        .stat-card:nth-child(2){animation-delay:.1s;--bar-color:var(--emerald);}
-        .stat-card:nth-child(3){animation-delay:.15s;--bar-color:var(--amber);}
-        .stat-card:nth-child(4){animation-delay:.2s;--bar-color:var(--violet);}
-        .stat-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-md); transform: translateY(-2px); }
-        .stat-label { font-size: 10.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
-        .stat-value { font-family: 'DM Serif Display', serif; font-size: 2.1rem; line-height: 1; font-weight: 400; }
-        .stat-value.c-accent { color: var(--accent); }
-        .stat-value.c-emerald { color: var(--emerald); }
-        .stat-value.c-amber { color: var(--amber); }
-        .stat-value.c-violet { color: var(--violet); }
-        .stat-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; }
+/* TABS */
+.tabs { display: flex; gap: 10px; margin-bottom: 22px; }
+.tab-btn { padding: 10px 24px; font-size: 13.5px; font-weight: 600; font-family: 'DM Sans', sans-serif; background: var(--surface); border: 1.5px solid var(--border); border-radius: 10px; color: var(--text-muted); cursor: pointer; transition: all 0.2s ease; box-shadow: var(--shadow-sm); }
+.tab-btn:hover { border-color: var(--accent); color: var(--accent); }
+.tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(37,99,235,0.25); }
 
-        /* ── FILTER BAR ── */
-        .filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap; box-shadow: var(--shadow-sm); }
-        .filter-group { display: flex; flex-direction: column; gap: 9px; }
-        .filter-label { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
+/* STATS */
+.stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 22px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 22px 18px; position: relative; overflow: hidden; transition: border-color .2s, box-shadow .2s, transform .2s; box-shadow: var(--shadow-sm); animation: fadeUp .4s ease both; }
+.stat-card::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--bar-color, transparent); opacity: 0.7; }
+.stat-card:nth-child(1){animation-delay:.05s;--bar-color:var(--accent);}
+.stat-card:nth-child(2){animation-delay:.1s;--bar-color:var(--emerald);}
+.stat-card:nth-child(3){animation-delay:.15s;--bar-color:var(--amber);}
+.stat-card:nth-child(4){animation-delay:.2s;--bar-color:var(--rose);}
+.stat-card:hover { border-color: var(--border-hover); box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.stat-label { font-size: 10.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; }
+.stat-value { font-family: 'DM Serif Display', serif; font-size: 2.1rem; line-height: 1; font-weight: 400; }
+.stat-value.c-accent { color: var(--accent); }
+.stat-value.c-emerald { color: var(--emerald); }
+.stat-value.c-amber { color: var(--amber); }
+.stat-value.c-rose { color: var(--rose); }
+.stat-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 7px; }
 
-        .suburb-wrap { position: relative; min-width: 230px; }
-        .suburb-input-row { display: flex; align-items: center; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; gap: 8px; transition: border-color .2s, box-shadow .2s; }
-        .suburb-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
-        .suburb-icon { color: var(--text-muted); font-size: 15px; flex-shrink: 0; }
-        .suburb-input-row input { background: none; border: none; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13.5px; padding: 9px 0; outline: none; width: 100%; }
-        .suburb-input-row input::placeholder { color: var(--text-muted); }
-        .suburb-clear { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 17px; padding: 0; display: none; line-height: 1; }
-        .suburb-clear.show { display: block; }
-        .suburb-dropdown { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border-hover); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9000; display: none; box-shadow: 0 16px 40px rgba(0,0,0,0.13); }
-        .suburb-dropdown.open { display: block; }
-        .suburb-opt { padding: 9px 14px; font-size: 13px; cursor: pointer; transition: background .1s; color: var(--text-dim); }
-        .suburb-opt:hover { background: var(--accent-light); color: var(--accent); }
-        .suburb-opt.selected { color: var(--accent); font-weight: 600; }
-        .suburb-opt.no-results { color: var(--text-muted); cursor: default; font-style: italic; }
-        .suburb-dropdown::-webkit-scrollbar { width: 3px; }
-        .suburb-dropdown::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
+/* FILTER BAR */
+.filter-bar { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: flex-start; gap: 28px; flex-wrap: wrap; box-shadow: var(--shadow-sm); }
+.filter-group { display: flex; flex-direction: column; gap: 9px; }
+.filter-label { font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--text-muted); }
 
-        .price-range-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-        .price-input-box { display: flex; align-items: center; gap: 6px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; transition: border-color .2s, box-shadow .2s; }
-        .price-input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
-        .price-input-box span { font-size: 12px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
-        .price-input-box input { background: none; border: none; outline: none; width: 90px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); padding: 9px 0; }
-        .price-input-box input::placeholder { color: var(--text-muted); }
-        .price-sep { color: var(--text-muted); font-size: 13px; font-weight: 500; flex-shrink: 0; }
-        .price-clear-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 11px; color: var(--text-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all .15s; white-space: nowrap; }
-        .price-clear-btn:hover { border-color: var(--border-hover); color: var(--accent); }
+.suburb-wrap { position: relative; min-width: 230px; }
+.suburb-input-row { display: flex; align-items: center; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; gap: 8px; transition: border-color .2s, box-shadow .2s; }
+.suburb-input-row:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.suburb-icon { color: var(--text-muted); font-size: 15px; flex-shrink: 0; }
+.suburb-input-row input { background: none; border: none; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13.5px; padding: 9px 0; outline: none; width: 100%; }
+.suburb-input-row input::placeholder { color: var(--text-muted); }
+.suburb-clear { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 17px; padding: 0; display: none; line-height: 1; }
+.suburb-clear.show { display: block; }
+.suburb-dropdown { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border-hover); border-radius: 10px; max-height: 220px; overflow-y: auto; z-index: 9000; display: none; box-shadow: 0 16px 40px rgba(0,0,0,0.13); }
+.suburb-dropdown.open { display: block; }
+.suburb-opt { padding: 9px 14px; font-size: 13px; cursor: pointer; transition: background .1s; color: var(--text-dim); }
+.suburb-opt:hover { background: var(--accent-light); color: var(--accent); }
+.suburb-opt.selected { color: var(--accent); font-weight: 600; }
+.suburb-opt.no-results { color: var(--text-muted); cursor: default; font-style: italic; }
+.suburb-dropdown::-webkit-scrollbar { width: 3px; }
+.suburb-dropdown::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 3px; }
 
-        .withheld-check { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--text-dim); font-weight: 500; padding: 4px 0; }
-        .withheld-check input { display: none; }
-        .wcheck-box { width: 17px; height: 17px; border-radius: 4px; border: 1.5px solid var(--border-hover); background: var(--surface2); display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all .15s; }
-        .withheld-check input:checked + .wcheck-box { background: #64748b; border-color: #64748b; }
-        .withheld-check input:checked + .wcheck-box svg { opacity: 1; }
-        .wcheck-box svg { opacity: 0; transition: opacity .15s; }
+.price-range-wrap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.price-input-box { display: flex; align-items: center; gap: 6px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 0 12px; transition: border-color .2s, box-shadow .2s; }
+.price-input-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+.price-input-box span { font-size: 12px; color: var(--text-muted); font-weight: 600; flex-shrink: 0; }
+.price-input-box input { background: none; border: none; outline: none; width: 90px; font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text); padding: 9px 0; }
+.price-input-box input::placeholder { color: var(--text-muted); }
+.price-sep { color: var(--text-muted); font-size: 13px; font-weight: 500; flex-shrink: 0; }
+.price-clear-btn { background: none; border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 11px; color: var(--text-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all .15s; white-space: nowrap; }
+.price-clear-btn:hover { border-color: var(--border-hover); color: var(--accent); }
 
-        .type-pills { display: flex; gap: 7px; flex-wrap: wrap; }
-        .type-pill { padding: 6px 13px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 100px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--text-muted); font-weight: 500; transition: all .18s; }
-        .type-pill:hover { border-color: var(--border-hover); color: var(--text); }
-        .type-pill.on { background: var(--accent-light); border-color: rgba(37,99,235,0.3); color: var(--accent); font-weight: 600; }
+.beds-wrap { display: flex; gap: 6px; }
+.beds-btn { padding: 6px 12px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--text-muted); font-weight: 600; transition: all .18s; min-width: 36px; text-align: center; }
+.beds-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.beds-btn.on { background: var(--accent-light); border-color: rgba(37,99,235,0.3); color: var(--accent); }
 
-        /* ── CUSTOM DUAL SLIDER STYLE ── */
-        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; margin: 0; padding: 0; outline: none; pointer-events: none; }
-        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 6px; background: transparent; border-radius: 4px; }
-        input[type=range]::-webkit-slider-thumb { border: 2.5px solid #fff; height: 16px; width: 16px; border-radius: 50%; background: var(--accent); cursor: pointer; -webkit-appearance: none; margin-top: -5px; box-shadow: var(--shadow-sm); pointer-events: auto; position: relative; z-index: 10; }
+/* Deal Signal SEGMENTED (single-select + ALL) */
+.signal-seg { display: inline-flex; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 10px; padding: 3px; gap: 2px; }
+.signal-seg-btn { padding: 7px 14px; font-size: 12.5px; font-weight: 600; border: none; background: none; border-radius: 7px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif; transition: all .15s; white-space: nowrap; }
+.signal-seg-btn:hover { color: var(--text); }
+.signal-seg-btn.on { background: var(--surface); box-shadow: var(--shadow-sm); }
+.signal-seg-btn.on[data-s="ALL"]              { color: var(--accent); }
+.signal-seg-btn.on[data-s="Good Deal"]        { color: var(--emerald); }
+.signal-seg-btn.on[data-s="Fair"]             { color: var(--accent); }
+.signal-seg-btn.on[data-s="Overpriced"]       { color: var(--rose); }
+.signal-seg-btn.on[data-s="No Asking Price"]  { color: var(--text-dim); }
 
-        /* ── CONTENT GRID ── */
-        .content-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; margin-bottom: 18px; }
-        .charts-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 18px; }
+.type-pills { display: flex; gap: 7px; flex-wrap: wrap; }
+.type-pill { padding: 6px 13px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 100px; cursor: pointer; user-select: none; font-size: 12.5px; color: var(--text-muted); font-weight: 500; transition: all .18s; }
+.type-pill:hover { border-color: var(--border-hover); color: var(--text); }
+.type-pill.on { background: var(--accent-light); border-color: rgba(37,99,235,0.3); color: var(--accent); font-weight: 600; }
 
-        .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm); animation: fadeUp .45s ease .1s both; }
-        .panel-head { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-        .panel-title { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
-        .panel-hint { font-size: 11.5px; color: var(--text-muted); }
-        .panel-body { padding: 18px 20px; }
+/* PANELS */
+.tab-content { display: none; animation: fadeUp .35s ease both; }
+.tab-content.active { display: block; }
 
-        /* ── MAP ── */
-        #map { height: 520px; width: 100%; }
-        .leaflet-container { background: #e8edf5 !important; }
-        .leaflet-popup-content-wrapper { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; box-shadow: 0 16px 40px rgba(0,0,0,0.14) !important; color: var(--text) !important; }
-        .leaflet-popup-tip { background: var(--surface) !important; }
-        .leaflet-popup-close-button { color: var(--text-muted) !important; font-size: 18px !important; padding: 8px 10px !important; }
-        .leaflet-popup-content { margin: 0 !important; }
-        
-        .popup-body { font-family: 'DM Sans', sans-serif; min-width: 260px; padding: 16px; }
-        .popup-header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-        .popup-badge { font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; }
-        .badge-sale { background: var(--emerald-light); color: var(--emerald); }
-        .badge-sold { background: rgba(124,58,237,0.1); color: var(--violet); }
-        .popup-date { font-size: 11px; color: var(--text-muted); font-weight: 500; }
-        .popup-addr { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 7px; line-height: 1.4; }
-        .popup-price { font-family: 'DM Serif Display', serif; font-size: 1.45rem; margin-bottom: 12px; }
-        .popup-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-        .spec { background: var(--surface2); border-radius: 7px; padding: 7px 9px; }
-        .spec.full { grid-column: span 2; }
-        .spec-l { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
-        .spec-v { font-size: 12px; font-weight: 600; color: var(--text-dim); }
-        .popup-btn { display: block; text-align: center; background: var(--accent2); color: var(--accent); padding: 9px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 12px; transition: background .2s; border: 1px solid var(--border); margin-top: 10px;}
-        .popup-btn:hover { background: var(--accent-light); }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-sm); animation: fadeUp .45s ease .1s both; }
+.panel-head { padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.panel-title { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); }
+.panel-hint { font-size: 11.5px; color: var(--text-muted); }
+.panel-body { padding: 18px 20px; }
 
-        /* Tooltip cho Proportional Map */
-        .choro-tooltip { background: rgba(255,255,255,0.96); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'DM Sans', sans-serif; color: var(--text); box-shadow: var(--shadow-sm); }
-        .choro-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; color: var(--accent); }
-        .choro-stat { font-size: 12px; margin-bottom: 3px; display: flex; justify-content: space-between; gap: 15px;}
-        .choro-stat span { color: var(--text-muted); }
+.chart-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
 
-        .mlegend { background: rgba(255,255,255,0.96) !important; border: 1px solid rgba(0,0,0,0.08) !important; border-radius: 11px !important; padding: 13px 16px !important; backdrop-filter: blur(12px); box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important; }
-        .mlegend-title { font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 9px; font-family: 'DM Sans', sans-serif; }
-        .mlegend-row { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-dim); }
-        .mlegend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.toggle-btn-group { display: flex; gap: 1px; background: var(--surface2); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
+.toggle-btn { padding: 5px 14px; font-size: 11px; font-weight: 600; border: none; background: none; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif; transition: all .15s; letter-spacing: 0.3px; }
+.toggle-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
 
-        .cw280 { height: 280px; position: relative; }
-        .cw420 { height: 420px; position: relative; }
+.scatter-select { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 5px 10px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; font-weight: 600; color: var(--text-dim); outline: none; cursor: pointer; }
+.scatter-select:focus { border-color: var(--accent); }
 
-        .toggle-btn-group { display: flex; gap: 1px; background: var(--surface2); border-radius: 8px; padding: 3px; border: 1px solid var(--border); }
-        .toggle-btn { padding: 5px 14px; font-size: 11px; font-weight: 600; border: none; background: none; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif; transition: all .15s; letter-spacing: 0.3px; }
-        .toggle-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+/* CALLOUT BOX */
+.callout { background: var(--surface); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 12px; padding: 16px 22px; margin-bottom: 18px; box-shadow: var(--shadow-sm); animation: fadeUp .4s ease both; }
+.callout-title { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.callout-body { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+.callout-body p { margin-bottom: 6px; }
+.callout-body p:last-child { margin-bottom: 0; }
+.callout-body b { color: var(--text); font-weight: 700; }
+.callout-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; margin-top: 4px; }
+.callout-grid > div { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
+.callout-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; }
 
-        @keyframes fadeUp { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:translateY(0);} }
-        @media (max-width:1200px) { .content-grid{grid-template-columns:1fr;} .charts-row{grid-template-columns:1fr 1fr;} }
-        @media (max-width:768px) { .main,.header-inner{padding-left:20px;padding-right:20px;} .stats-row{grid-template-columns:1fr 1fr;} .charts-row{grid-template-columns:1fr 1fr;} .filter-bar{gap:18px;} }
-        @media (max-width:480px) { .charts-row{grid-template-columns:1fr;} .status-tabs {flex-direction: column;} }
-    </style>
+.callout.violet { border-left-color: var(--violet); }
+.callout.violet .callout-title { color: var(--violet); }
+
+.metric-pill { display: inline-flex; align-items: center; gap: 6px; background: var(--surface2); border: 1px solid var(--border); border-radius: 100px; padding: 4px 10px; font-size: 11.5px; font-weight: 600; color: var(--text-dim); margin-right: 6px; margin-top: 4px; }
+.metric-pill b { color: var(--accent); font-weight: 700; }
+
+/* MAP */
+#map { height: 560px; width: 100%; }
+.leaflet-container { background: #e8edf5 !important; font-family: 'DM Sans', sans-serif; }
+.leaflet-popup-content-wrapper { background: var(--surface) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; box-shadow: 0 16px 40px rgba(0,0,0,0.14) !important; color: var(--text) !important; }
+.leaflet-popup-tip { background: var(--surface) !important; }
+.leaflet-popup-close-button { color: var(--text-muted) !important; font-size: 18px !important; padding: 8px 10px !important; }
+.leaflet-popup-content { margin: 0 !important; }
+
+.popup-body { font-family: 'DM Sans', sans-serif; min-width: 260px; padding: 16px; }
+.popup-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.badge-good { background: var(--emerald-light); color: var(--emerald); }
+.badge-fair { background: var(--accent-light); color: var(--accent); }
+.badge-over { background: var(--rose-light); color: var(--rose); }
+.badge-noask { background: rgba(148,163,184,0.15); color: var(--text-dim); }
+.popup-suburb { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+.popup-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+.popup-price { font-family: 'DM Serif Display', serif; font-size: 1.4rem; margin-bottom: 4px; color: var(--accent); }
+.popup-range { font-size: 11px; color: var(--text-muted); margin-bottom: 8px; }
+.popup-asking { font-size: 11.5px; color: var(--text-dim); margin-bottom: 10px; }
+.popup-asking b { color: var(--text); }
+.popup-specs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
+.spec { background: var(--surface2); border-radius: 7px; padding: 6px 9px; }
+.spec-l { font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 2px; }
+.spec-v { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.popup-btn { display: block; text-align: center; background: var(--accent2); color: var(--accent); padding: 9px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 12px; transition: background .2s; border: 1px solid var(--border); margin-top: 10px; }
+.popup-btn:hover { background: var(--accent-light); }
+
+.choro-tooltip { background: rgba(255,255,255,0.97); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: 'DM Sans', sans-serif; color: var(--text); box-shadow: var(--shadow-sm); }
+.choro-title { font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--accent); letter-spacing: 0.3px; }
+.choro-stat { font-size: 11.5px; margin-bottom: 3px; display: flex; justify-content: space-between; gap: 15px; }
+.choro-stat span { color: var(--text-muted); }
+
+.mlegend { background: rgba(255,255,255,0.96) !important; border: 1px solid rgba(0,0,0,0.08) !important; border-radius: 11px !important; padding: 13px 16px !important; backdrop-filter: blur(12px); box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important; }
+.mlegend-title { font-size: 9.5px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 9px; font-family: 'DM Sans', sans-serif; }
+.mlegend-row { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; color: var(--text-dim); }
+.mlegend-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+.cw280 { height: 280px; position: relative; }
+.cw380 { height: 380px; position: relative; }
+
+/* PREDICT TAB */
+.predict-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 18px; }
+.predict-form-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: var(--shadow-sm); }
+.predict-form-title { font-family: 'DM Serif Display', serif; font-size: 1.2rem; margin-bottom: 16px; color: var(--text); }
+.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.field-full { grid-column: span 2; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 10px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--text-muted); }
+.field input, .field select { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 9px 12px; font-family: 'DM Sans', sans-serif; font-size: 13.5px; color: var(--text); outline: none; transition: border-color .2s, box-shadow .2s; }
+.field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-light); }
+
+.predict-btn { width: 100%; padding: 14px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; cursor: pointer; transition: background .2s, box-shadow .2s; margin-top: 20px; box-shadow: 0 4px 12px rgba(37,99,235,0.2); }
+.predict-btn:hover:not(:disabled) { background: #1d4ed8; box-shadow: 0 6px 16px rgba(37,99,235,0.3); }
+.predict-btn:disabled { background: var(--slate); cursor: not-allowed; box-shadow: none; }
+
+.predict-result-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 24px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; }
+.result-state { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13.5px; line-height: 1.6; }
+.result-state.loading { color: var(--accent); }
+.result-content { display: none; }
+.result-content.show { display: block; }
+
+.result-main { text-align: center; margin-bottom: 20px; }
+.result-main-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; }
+.result-main-value { font-family: 'DM Serif Display', serif; font-size: 2.8rem; color: var(--accent); line-height: 1; margin-bottom: 6px; }
+.result-main-sub { font-size: 12px; color: var(--text-muted); }
+
+.result-range { background: var(--surface2); border-radius: 10px; padding: 14px 18px; margin-bottom: 18px; }
+.range-bar-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.range-bar { flex: 1; height: 6px; background: var(--border); border-radius: 4px; position: relative; overflow: hidden; }
+.range-bar-fill { position: absolute; top: 0; left: 20%; right: 20%; height: 100%; background: linear-gradient(90deg, var(--emerald), var(--accent), var(--rose)); border-radius: 4px; }
+.range-bar-marker { position: absolute; top: -3px; left: 50%; width: 3px; height: 12px; background: var(--text); border-radius: 2px; transform: translateX(-50%); }
+.range-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
+.range-labels b { color: var(--text-dim); font-weight: 600; }
+
+.result-comparison { background: var(--surface2); border-left: 3px solid var(--accent); border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 12.5px; color: var(--text-dim); line-height: 1.55; }
+.result-comparison b { color: var(--text); font-weight: 700; }
+
+.result-warning { background: var(--amber-light); border-left: 3px solid var(--amber); border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; font-size: 12px; color: var(--text-dim); line-height: 1.55; }
+.result-warning::before { content: '⚠ '; color: var(--amber); font-weight: 700; }
+
+.result-footer { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+
+.predict-loader-bar { height: 4px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin: 12px 0 8px; }
+.predict-loader-bar::after { content: ''; display: block; height: 100%; width: 30%; background: var(--accent); animation: loaderSlide 1.4s ease-in-out infinite; border-radius: 4px; }
+@keyframes loaderSlide { 0%{margin-left:-30%;} 100%{margin-left:100%;} }
+
+@keyframes fadeUp { from{opacity:0;transform:translateY(14px);} to{opacity:1;transform:translateY(0);} }
+@media (max-width:1200px) { .chart-grid-2{grid-template-columns:1fr;} .predict-grid{grid-template-columns:1fr;} .callout-grid{grid-template-columns:1fr;} }
+@media (max-width:768px) { .main,.header-inner{padding-left:20px;padding-right:20px;} .stats-row{grid-template-columns:1fr 1fr;} .field-grid{grid-template-columns:1fr;} }
+@media (max-width:480px) { .tabs{flex-direction:column;} .signal-seg{flex-wrap:wrap;} }
+</style>
 </head>
 <body>
 
@@ -187,37 +262,21 @@
 </header>
 
 <main class="main">
-    
-    <div class="status-tabs" id="statusTabs">
-        <button class="tab-btn active" data-status="For Sale">For Sale</button>
-        <button class="tab-btn" data-status="Sold">Sold</button>
-        <button class="tab-btn" data-status="ALL">All Market</button>
+
+    <div class="tabs" id="tabs">
+        <button class="tab-btn active" data-tab="map">🗺️ Map</button>
+        <button class="tab-btn" data-tab="overview">📊 Overview</button>
+        <button class="tab-btn" data-tab="predict">🔮 Predict</button>
     </div>
 
     <div class="stats-row">
-        <div class="stat-card">
-            <div class="stat-label">Total Properties</div>
-            <div class="stat-value c-accent" id="statTotal">—</div>
-            <div class="stat-sub">Matching filters</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Average Price</div>
-            <div class="stat-value c-emerald" id="statAvgPrice">—</div>
-            <div class="stat-sub">Priced listings</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Median Price</div>
-            <div class="stat-value c-amber" id="statMedian">—</div>
-            <div class="stat-sub">50th percentile</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Suburbs</div>
-            <div class="stat-value c-violet" id="statSuburbs">—</div>
-            <div class="stat-sub">In current view</div>
-        </div>
+        <div class="stat-card"><div class="stat-label">Filtered Listings</div><div class="stat-value c-accent" id="statTotal">-</div><div class="stat-sub" id="statTotalSub">of -</div></div>
+        <div class="stat-card"><div class="stat-label">Median Predicted</div><div class="stat-value c-emerald" id="statMedian">-</div><div class="stat-sub">In current view</div></div>
+        <div class="stat-card"><div class="stat-label">Good Deals</div><div class="stat-value c-amber" id="statGood">-</div><div class="stat-sub" id="statGoodSub">- of filtered</div></div>
+        <div class="stat-card"><div class="stat-label">Overpriced</div><div class="stat-value c-rose" id="statOver">-</div><div class="stat-sub" id="statOverSub">- of filtered</div></div>
     </div>
 
-    <div class="filter-bar">
+    <div class="filter-bar" id="filterBar">
         <div class="filter-group">
             <div class="filter-label">Suburb</div>
             <div class="suburb-wrap">
@@ -231,41 +290,45 @@
         </div>
 
         <div class="filter-group">
-            <div class="filter-label">Price Range</div>
-            <div style="display:flex; flex-direction:column; gap:8px;">
-                <div class="price-range-wrap">
-                    <div class="price-input-box">
-                        <span>$</span>
-                        <input type="text" id="priceMin" placeholder="Min" inputmode="numeric">
-                    </div>
-                    <span class="price-sep">—</span>
-                    <div class="price-input-box">
-                        <span>$</span>
-                        <input type="text" id="priceMax" placeholder="Max" inputmode="numeric">
-                    </div>
-                    <button class="price-clear-btn" id="priceClearBtn">Clear</button>
+            <div class="filter-label">Predicted Price ($k)</div>
+            <div class="price-range-wrap">
+                <div class="price-input-box">
+                    <span>$</span>
+                    <input type="text" id="priceMin" placeholder="Min" inputmode="numeric">
                 </div>
-                <label class="withheld-check">
-                    <input type="checkbox" id="showWithheld" checked>
-                    <span class="wcheck-box">
-                        <svg width="10" height="8" viewBox="0 0 10 8"><polyline points="1,4 4,7 9,1" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                    </span>
-                    Show price-withheld listings
-                </label>
-            </div>
-        </div>
-
-        <div class="filter-group" id="yearFilterGroup" style="display: none;">
-            <div class="filter-label">Year Sold <span id="yearLabel" style="color:var(--accent); font-weight:700; margin-left:4px;">All</span></div>
-            <div class="price-input-box" style="padding: 10px 12px; min-width: 160px; border-radius: 10px; position: relative; height: 36px; display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; left: 12px; right: 12px; height: 6px; background: var(--border); border-radius: 4px;"></div>
-                <div id="sliderFill" style="position: absolute; left: 12px; right: 12px; height: 6px; background: var(--accent); border-radius: 4px; width: 100%;"></div>
-                <input type="range" id="yearSliderMin" min="2010" max="2026" value="2010" style="position: absolute; left: 12px; width: calc(100% - 24px); z-index: 3;">
-                <input type="range" id="yearSliderMax" min="2010" max="2026" value="2026" style="position: absolute; left: 12px; width: calc(100% - 24px); z-index: 4;">
+                <span class="price-sep">-</span>
+                <div class="price-input-box">
+                    <span>$</span>
+                    <input type="text" id="priceMax" placeholder="Max" inputmode="numeric">
+                </div>
+                <button class="price-clear-btn" id="priceClearBtn">Clear</button>
             </div>
         </div>
 
         <div class="filter-group">
+            <div class="filter-label">Beds</div>
+            <div class="beds-wrap" id="bedsWrap">
+                <div class="beds-btn on" data-b="any">Any</div>
+                <div class="beds-btn" data-b="1">1</div>
+                <div class="beds-btn" data-b="2">2</div>
+                <div class="beds-btn" data-b="3">3</div>
+                <div class="beds-btn" data-b="4">4</div>
+                <div class="beds-btn" data-b="5">5+</div>
+            </div>
+        </div>
+
+        <div class="filter-group">
+            <div class="filter-label">Deal Signal</div>
+            <div class="signal-seg" id="signalSeg">
+                <button class="signal-seg-btn on" data-s="ALL">All</button>
+                <button class="signal-seg-btn" data-s="Good Deal">Good Deal</button>
+                <button class="signal-seg-btn" data-s="Fair">Fair</button>
+                <button class="signal-seg-btn" data-s="Overpriced">Overpriced</button>
+                <button class="signal-seg-btn" data-s="No Asking Price">No Asking</button>
+            </div>
+        </div>
+
+        <div class="filter-group" style="flex: 1; min-width: 240px;">
             <div class="filter-label">Property Type</div>
             <div class="type-pills" id="typePills">
                 <div class="type-pill on" data-t="ALL">All Types</div>
@@ -273,49 +336,190 @@
         </div>
     </div>
 
-    <div class="content-grid">
+    <!-- TAB: MAP -->
+    <div class="tab-content active" id="tab-map">
+
+        <div class="callout violet">
+            <div class="callout-title">About the model</div>
+            <div class="callout-body">
+                <p>Prices come from an <b>XGBoost</b> regression model trained on <b>114,594 Sold transactions</b> (2005–2026) using a time-based 70/15/15 split, with locked hyperparameters from the ML report.</p>
+                <p>The model uses 34 features: property attributes (beds, baths, land size), location (suburb, distance to CBD, train), and area demographics (income, age, population, crime). At inference, current Year and Month are injected so predictions reflect today's market level.</p>
+                <div style="margin-top: 8px;">
+                    <span class="metric-pill">Test MAPE <b id="mlMape">11.83%</b></span>
+                    <span class="metric-pill">Test R² <b id="mlR2">0.869</b></span>
+                    <span class="metric-pill">Test RMSE <b id="mlRmse">$203k</b></span>
+                </div>
+                <p style="margin-top: 10px; font-size: 12.5px;"><b>Deal Signal logic:</b> compares asking vs predicted price. Asking >10% below predicted = <b style="color:#059669">Good Deal</b>, asking >10% above predicted = <b style="color:#e11d48">Overpriced</b>, otherwise <b style="color:#2563eb">Fair</b>.</p>
+            </div>
+        </div>
+        
+        <div class="callout">
+            <div class="callout-title">How to read the map</div>
+            <div class="callout-body">
+                <p>The map has two modes - toggle them using the buttons at the top right of the map panel.</p>
+                <div class="callout-grid">
+                    <div><span class="callout-dot" style="background: #2563eb;"></span><div><b>Points mode</b> - every For Sale listing is a dot, colored by Deal Signal. Click a dot to see asking vs predicted price, specs, and a link to the original Domain listing.</div></div>
+                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>Suburb Choropleth</b> - suburbs colored by their median predicted price. Hover for stats. <b>Click a suburb</b> to filter the entire dashboard to that area.</div></div>
+                </div>
+            </div>
+        </div>
+
         <div class="panel">
             <div class="panel-head">
-                <span class="panel-title" id="mapTitle">Valuation Map</span>
+                <span class="panel-title">Valuation Map</span>
                 <div class="toggle-btn-group">
-                    <button class="toggle-btn active" id="btnMapPoints" onclick="setMapMode('points')">Points</button>
-                    <button class="toggle-btn" id="btnMapProp" onclick="setMapMode('proportional')">Suburb Bubbles</button>
+                    <button class="toggle-btn active" id="btnMapPoints">Points</button>
+                    <button class="toggle-btn" id="btnMapChoro">Suburb Choropleth</button>
                 </div>
             </div>
             <div id="map"></div>
         </div>
+    </div>
 
-        <div class="panel">
-            <div class="panel-head"><span class="panel-title">Top 10 by Volume</span></div>
-            <div class="panel-body"><div class="cw420"><canvas id="suburbChart"></canvas></div></div>
+    <!-- TAB: OVERVIEW -->
+    <div class="tab-content" id="tab-overview">
+
+
+        <div class="chart-grid-2">
+            <div class="panel">
+                <div class="panel-head"><span class="panel-title">Predicted Price Distribution</span></div>
+                <div class="panel-body"><div class="cw380"><canvas id="priceHistChart"></canvas></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-head"><span class="panel-title">Deal Signal</span></div>
+                <div class="panel-body"><div class="cw380"><canvas id="signalChart"></canvas></div></div>
+            </div>
+        </div>
+
+        <div class="chart-grid-2">
+            <div class="panel">
+                <div class="panel-head"><span class="panel-title">Property Types</span></div>
+                <div class="panel-body"><div class="cw380"><canvas id="typeChart"></canvas></div></div>
+            </div>
+            <div class="panel">
+                <div class="panel-head"><span class="panel-title">Top 10 Suburbs by Volume</span></div>
+                <div class="panel-body"><div class="cw380"><canvas id="suburbVolChart"></canvas></div></div>
+            </div>
+        </div>
+
+        <div class="chart-grid-2">
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Top 15 Suburbs by Median Price</span>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn active" id="btnTopHigh">Highest</button>
+                        <button class="toggle-btn" id="btnTopLow">Lowest</button>
+                    </div>
+                </div>
+                <div class="panel-body"><div class="cw380"><canvas id="topSuburbsChart"></canvas></div></div>
+            </div>
+
+            <div class="panel">
+                <div class="panel-head">
+                    <span class="panel-title">Predicted Price vs ...</span>
+                    <select class="scatter-select" id="scatterXSel">
+                        <option value="Distance_to_CBD_km">Distance to CBD (km)</option>
+                        <option value="LandSize_sqm">Land Size (sqm)</option>
+                        <option value="Beds">Beds</option>
+                        <option value="abs_median_income_weekly">Median weekly income ($)</option>
+                        <option value="abs_median_age">Median age (years)</option>
+                        <option value="crime_rate_per_100k">Crime rate (per 100k)</option>
+                        <option value="dist_nearest_train_km">Distance to nearest train (km)</option>
+                    </select>
+                </div>
+                <div class="panel-body"><div class="cw380"><canvas id="scatterChart"></canvas></div></div>
+            </div>
         </div>
     </div>
 
-    <div class="charts-row">
-        <div class="panel">
-            <div class="panel-head">
-                <span class="panel-title">Suburbs by Avg Price</span>
-                <div class="toggle-btn-group">
-                    <button class="toggle-btn active" id="btnHighest" onclick="setSuburbPriceMode('highest')">Highest</button>
-                    <button class="toggle-btn" id="btnLowest" onclick="setSuburbPriceMode('lowest')">Lowest</button>
+    <!-- TAB: PREDICT -->
+    <div class="tab-content" id="tab-predict">
+
+        <div class="callout">
+            <div class="callout-title">How prediction works</div>
+            <div class="callout-body">
+                <p>Fill in the property details below, click <b>Estimate Price</b>, and the XGBoost model runs <b>directly in your browser</b> (no server) to return a point estimate plus an 80% prediction interval.</p>
+                <p style="margin-top: 6px;">The model is loaded once per session (~14 MB total across 3 quantile models). Predictions are calibrated against the latest weekly snapshot and reflect the current market level.</p>
+            </div>
+        </div>
+
+        <div class="predict-grid">
+            <div class="predict-form-panel">
+                <div class="predict-form-title">Property details</div>
+                <div class="field-grid">
+                    <div class="field field-full">
+                        <label>Suburb</label>
+                        <select id="pf_suburb"></select>
+                    </div>
+                    <div class="field">
+                        <label>Property Type</label>
+                        <select id="pf_type"></select>
+                    </div>
+                    <div class="field">
+                        <label>Postcode</label>
+                        <input type="number" id="pf_postcode" value="3000">
+                    </div>
+                    <div class="field">
+                        <label>Beds</label>
+                        <input type="number" id="pf_beds" value="3" min="0" max="10">
+                    </div>
+                    <div class="field">
+                        <label>Baths</label>
+                        <input type="number" id="pf_baths" value="2" min="0" max="10">
+                    </div>
+                    <div class="field">
+                        <label>Car Spaces</label>
+                        <input type="number" id="pf_cars" value="2" min="0" max="10">
+                    </div>
+                    <div class="field">
+                        <label>Land Size (sqm)</label>
+                        <input type="number" id="pf_land" value="400" min="0" step="10">
+                    </div>
+                    <div class="field field-full">
+                        <label>Distance to CBD (km)</label>
+                        <input type="number" id="pf_cbd" value="10" min="0" max="200" step="0.1">
+                    </div>
+                </div>
+                <button class="predict-btn" id="predictBtn">🔮 Estimate Price</button>
+            </div>
+
+            <div class="predict-result-panel">
+                <div class="result-state" id="resultState">Fill in the form on the left and click <b>Estimate Price</b>.<br><br>The model will load on first use (~14 MB), then runs instantly in your browser.</div>
+                <div class="result-content" id="resultContent">
+                    <div class="result-main">
+                        <div class="result-main-label">Point Estimate</div>
+                        <div class="result-main-value" id="rPoint">-</div>
+                        <div class="result-main-sub" id="rPointSub">-</div>
+                    </div>
+                    <div class="result-range">
+                        <div class="range-bar-wrap">
+                            <div class="range-bar">
+                                <div class="range-bar-fill"></div>
+                                <div class="range-bar-marker"></div>
+                            </div>
+                        </div>
+                        <div class="range-labels">
+                            <span>Lower: <b id="rLower">-</b></span>
+                            <span>Upper: <b id="rUpper">-</b></span>
+                        </div>
+                    </div>
+                    <div class="result-comparison" id="rCompare" style="display:none;"></div>
+                    <div id="rWarnings"></div>
+                    <div class="result-footer" id="rFooter"></div>
                 </div>
             </div>
-            <div class="panel-body"><div class="cw280"><canvas id="suburbPriceChart"></canvas></div></div>
         </div>
 
-        <div class="panel">
-            <div class="panel-head"><span class="panel-title">Price Distribution</span></div>
-            <div class="panel-body"><div class="cw280"><canvas id="priceChart"></canvas></div></div>
-        </div>
-
-        <div class="panel">
-            <div class="panel-head"><span class="panel-title">Property Types</span></div>
-            <div class="panel-body"><div class="cw280"><canvas id="typeChart"></canvas></div></div>
-        </div>
-
-        <div class="panel">
-            <div class="panel-head"><span class="panel-title">Bedrooms Breakdown</span></div>
-            <div class="panel-body"><div class="cw280"><canvas id="bedsChart"></canvas></div></div>
+        <div class="callout violet" style="margin-top: 18px;">
+            <div class="callout-title">Limitations to keep in mind</div>
+            <div class="callout-body">
+                <div class="callout-grid">
+                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>Luxury range</b> (>$2.5M): ~23% MAPE - the model is less accurate at the top end where transactions are scarce.</div></div>
+                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>Budget range</b> (<$500k): ~17% MAPE - mostly small apartments where condition variation is large.</div></div>
+                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>New builds</b>: 30% of For Sale but only 0.3% of Sold history. Predictions on new-build types carry extra uncertainty.</div></div>
+                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>Cold-start suburbs</b>: a handful of suburbs (0.03%) have no training data. The model falls back to medians.</div></div>
+                </div>
+            </div>
         </div>
     </div>
 </main>
@@ -323,11 +527,15 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/ort.min.js"></script>
+
 <script>
-/* ── Chart defaults (Tắt animation để tab chuyển mượt) ── */
+/* ════════════════════════════════════════════════════════════
+   CONSTANTS & STATE
+   ════════════════════════════════════════════════════════════ */
 Chart.defaults.font.family = "'DM Sans', sans-serif";
 Chart.defaults.color = '#7c8499';
-Chart.defaults.animation = false; // Tối ưu hiệu năng
+Chart.defaults.animation = false;
 Chart.defaults.plugins.tooltip.backgroundColor = 'rgba(255,255,255,0.98)';
 Chart.defaults.plugins.tooltip.borderColor = 'rgba(0,0,0,0.08)';
 Chart.defaults.plugins.tooltip.borderWidth = 1;
@@ -336,591 +544,849 @@ Chart.defaults.plugins.tooltip.cornerRadius = 10;
 Chart.defaults.plugins.tooltip.titleColor = '#1a1d27';
 Chart.defaults.plugins.tooltip.bodyColor = '#4a5168';
 Chart.defaults.plugins.tooltip.titleFont = { size: 13, weight: '700' };
-Chart.defaults.plugins.tooltip.bodyFont  = { size: 12 };
+Chart.defaults.plugins.tooltip.bodyFont = { size: 12 };
 Chart.defaults.plugins.tooltip.displayColors = false;
 
-/* ── STATE ── */
-let allData = [], suburbs = [], currentFilteredData = [];
-let selSuburb = 'ALL', activeType = 'ALL', activeStatus = 'For Sale', activeYearMin = 'ALL', activeYearMax = 'ALL';
-let priceMinVal = null, priceMaxVal = null, showWithheld = true;
-let charts = {}, suburbPriceMode = 'highest';
-let cachedSuburbStats = {};
-
-let mapMode = 'points'; // 'points' | 'proportional'
-let geojsonData = null;
-let choroLayer = null; // Layer để vẽ viền ranh giới Suburb
-let suburbLayer = null; // Layer để vẽ bong bóng Proportional
-
-const RANGE_COLORS = { '0':'#059669','1':'#2563eb','2':'#d97706','3':'#e11d48','w':'#94a3b8' };
-
-function priceRange(p) {
-    if (!p || isNaN(p)) return 'w';
-    if (p < 750000) return '0';
-    if (p < 1500000) return '1';
-    if (p < 3000000) return '2';
-    return '3';
+const SIGNAL_COLORS = {
+    'Good Deal':       '#059669',
+    'Fair':            '#2563eb',
+    'Overpriced':      '#e11d48',
+    'No Asking Price': '#94a3b8',
+};
+const SIGNAL_BADGE_CLS = {
+    'Good Deal':       'badge-good',
+    'Fair':            'badge-fair',
+    'Overpriced':      'badge-over',
+    'No Asking Price': 'badge-noask',
+};
+const PRICE_BUCKETS = [
+    { max: 750000,        color: '#059669', label: 'Under $750k' },
+    { max: 1500000,       color: '#2563eb', label: '$750k – $1.5M' },
+    { max: 3000000,       color: '#d97706', label: '$1.5M – $3M' },
+    { max: Infinity,      color: '#e11d48', label: 'Over $3M' },
+];
+function priceBucketColor(p) {
+    if (!p || isNaN(p)) return '#94a3b8';
+    for (const b of PRICE_BUCKETS) if (p < b.max) return b.color;
+    return '#94a3b8';
 }
 
-/* ── FETCH GEOJSON ── */
-fetch('data/melbourne_suburb_boundaries.geojson')
-    .then(r => r.json())
-    .then(data => { geojsonData = data; })
-    .catch(e => console.log('No geojson found, boundary map will not render.'));
+let allData = [], suburbs = [], filteredData = [];
+let cachedSuburbStats = {};
+let geojsonData = null;
+let preprocessorMeta = null;
+let onnxSessions = { point: null, q10: null, q90: null, loading: false, loaded: false };
 
-/* ── MAP SETUP ── */
-// Dùng preferCanvas để render >10k điểm siêu mượt mà không cần cluster
-const map = L.map('map', { zoomControl: true, attributionControl: false, preferCanvas: true }).setView([-37.8136,144.9631],10);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+let selSuburb = 'ALL';
+let activeType = 'ALL';
+let activeBeds = 'any';
+let activeSignal = 'ALL';  // Single-select now
+let priceMinVal = null, priceMaxVal = null;
+
+let topSubMode = 'highest';
+let scatterXKey = 'Distance_to_CBD_km';
+const SCATTER_X_LABELS = {
+    'Distance_to_CBD_km':       'Distance to CBD (km)',
+    'LandSize_sqm':             'Land Size (sqm)',
+    'Beds':                     'Beds',
+    'abs_median_income_weekly': 'Median weekly income ($)',
+    'abs_median_age':           'Median age (years)',
+    'crime_rate_per_100k':      'Crime rate (per 100k)',
+    'dist_nearest_train_km':    'Distance to nearest train (km)',
+};
+
+let mapMode = 'points';
+const map = L.map('map', { zoomControl: true, attributionControl: false, preferCanvas: true })
+    .setView([-37.8136, 144.9631], 10);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+            { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
+let choroLayer = null;
+const legend = L.control({ position: 'bottomright' });
+let charts = {};
 
+/* ════════════════════════════════════════════════════════════
+   UTILITY
+   ════════════════════════════════════════════════════════════ */
+function debounce(fn, wait) {
+    let t;
+    return function(...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); };
+}
+function fmtMoney(v) {
+    if (v === null || v === undefined || isNaN(v)) return '-';
+    if (v >= 1000000) return '$' + (v/1000000).toFixed(2) + 'M';
+    if (v >= 1000)    return '$' + Math.round(v/1000) + 'k';
+    return '$' + Math.round(v);
+}
+function fmtMoneyFull(v) {
+    if (v === null || v === undefined || isNaN(v)) return '-';
+    return '$' + Math.round(v).toLocaleString();
+}
 function dotRadius(zoom) {
     if (zoom <= 9) return 3; if (zoom <= 11) return 4; if (zoom <= 13) return 5;
     if (zoom <= 15) return 6; return 7;
 }
 
-map.on('zoomend', () => {
-    if(mapMode === 'points') {
-        const r = dotRadius(map.getZoom());
-        markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
-    }
-});
+/* ════════════════════════════════════════════════════════════
+   FETCH AUX FILES
+   ════════════════════════════════════════════════════════════ */
+fetch('data/melbourne_suburb_boundaries.geojson')
+    .then(r => r.json())
+    .then(d => { geojsonData = d; })
+    .catch(() => console.warn('GeoJSON not found; choropleth disabled.'));
 
-const legend = L.control({ position: 'bottomright' });
+// Load metrics for callout box
+fetch('production/output/models/metrics.json')
+    .then(r => r.json())
+    .then(m => {
+        if (m.test_metrics) {
+            document.getElementById('mlMape').textContent = m.test_metrics.mape.toFixed(2) + '%';
+            document.getElementById('mlR2').textContent = m.test_metrics.r2.toFixed(3);
+            document.getElementById('mlRmse').textContent = '$' + Math.round(m.test_metrics.rmse_aud / 1000) + 'k';
+        }
+    })
+    .catch(() => {});
 
+/* ════════════════════════════════════════════════════════════
+   LEGEND
+   ════════════════════════════════════════════════════════════ */
 function updateLegend() {
-    const d = L.DomUtil.create('div','mlegend');
+    const div = L.DomUtil.create('div', 'mlegend');
     if (mapMode === 'points') {
-        d.innerHTML = `
-            <div class="mlegend-title">Price Range</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>Price Withheld</div>`;
+        let html = '<div class="mlegend-title">Deal Signal</div>';
+        for (const [k, c] of Object.entries(SIGNAL_COLORS)) {
+            html += `<div class="mlegend-row"><span class="mlegend-dot" style="background:${c}"></span>${k}</div>`;
+        }
+        div.innerHTML = html;
     } else {
-        d.innerHTML = `
-            <div class="mlegend-title">Median Price Range</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#059669"></span>Under $750k</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#2563eb"></span>$750k – $1.5M</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#d97706"></span>$1.5M – $3M</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#e11d48"></span>Over $3M</div>
-            <div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>No Data</div>`;
+        let html = '<div class="mlegend-title">Median Predicted</div>';
+        for (const b of PRICE_BUCKETS) {
+            html += `<div class="mlegend-row"><span class="mlegend-dot" style="background:${b.color}"></span>${b.label}</div>`;
+        }
+        html += '<div class="mlegend-row"><span class="mlegend-dot" style="background:#cbd5e1"></span>No data</div>';
+        div.innerHTML = html;
     }
-    
-    // Xóa nội dung cũ
-    const legendContainer = document.querySelector('.mlegend');
-    if(legendContainer) {
-        legendContainer.innerHTML = d.innerHTML;
-    } else {
-        legend.onAdd = function() { return d; };
-        legend.addTo(map);
-    }
+    const existing = document.querySelector('.leaflet-control.mlegend');
+    if (existing) existing.innerHTML = div.innerHTML;
+    else { legend.onAdd = () => div; legend.addTo(map); }
 }
 
-
-/* ── MAP TOGGLE ── */
-window.setMapMode = function(mode) {
-    mapMode = mode;
-    document.getElementById('btnMapPoints').classList.toggle('active', mode==='points');
-    document.getElementById('btnMapProp').classList.toggle('active', mode==='proportional');
-    updateLegend();
-    renderMap(currentFilteredData);
-};
-
-/* ── TABS LOGIC ── */
-document.getElementById('statusTabs').addEventListener('click', e => {
+/* ════════════════════════════════════════════════════════════
+   TABS
+   ════════════════════════════════════════════════════════════ */
+document.getElementById('tabs').addEventListener('click', e => {
     const btn = e.target.closest('.tab-btn');
     if (!btn) return;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    activeStatus = btn.dataset.status;
-    
-    // Hiện/Ẩn Slider Year
-    document.getElementById('yearFilterGroup').style.display = (activeStatus === 'Sold') ? 'flex' : 'none';
-    
-    applyFilters();
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+
+    if (btn.dataset.tab === 'map') {
+        setTimeout(() => map.invalidateSize(), 50);
+    }
 });
 
-/* ── DEBOUNCE FUNCTION ── */
-function debounce(func, wait) {
-    let timeout;
-    return function(...args) {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-    };
-}
-
-/* ── DUAL YEAR SLIDER LOGIC ── */
-const ysMin = document.getElementById('yearSliderMin');
-const ysMax = document.getElementById('yearSliderMax');
-const yl = document.getElementById('yearLabel');
-const sliderFill = document.getElementById('sliderFill');
-
-function updateYearSlider(e) {
-    let minV = parseInt(ysMin.value);
-    let maxV = parseInt(ysMax.value);
-    
-    // Prevent overlapping logically
-    if (minV > maxV) {
-        if (e && e.target.id === 'yearSliderMin') { ysMin.value = maxV; minV = maxV; } 
-        else { ysMax.value = minV; maxV = minV; }
-    }
-
-    const minLimit = parseInt(ysMin.min);
-    const maxLimit = parseInt(ysMax.max);
-    
-    if (minV == minLimit && maxV == maxLimit) {
-        yl.textContent = 'All';
-        activeYearMin = 'ALL'; activeYearMax = 'ALL';
-    } else if (minV === maxV) {
-        yl.textContent = minV;
-        activeYearMin = minV; activeYearMax = maxV;
-    } else {
-        yl.textContent = minV + ' - ' + maxV;
-        activeYearMin = minV; activeYearMax = maxV;
-    }
-
-    // Update the colored fill
-    if(maxLimit > minLimit) {
-        const pct1 = ((minV - minLimit) / (maxLimit - minLimit)) * 100;
-        const pct2 = ((maxV - minLimit) / (maxLimit - minLimit)) * 100;
-        sliderFill.style.left = `calc(12px + (100% - 24px) * ${pct1 / 100})`;
-        sliderFill.style.width = `calc((100% - 24px) * ${(pct2 - pct1) / 100})`;
-    }
-}
-
-ysMin.addEventListener('input', updateYearSlider);
-ysMax.addEventListener('input', updateYearSlider);
-ysMin.addEventListener('change', () => applyFilters());
-ysMax.addEventListener('change', () => applyFilters());
-
-/* ── SUBURB SEARCH ── */
+/* ════════════════════════════════════════════════════════════
+   FILTER BAR LOGIC
+   ════════════════════════════════════════════════════════════ */
 const subInput = document.getElementById('suburbInput');
 const subDrop  = document.getElementById('suburbDrop');
 const subClear = document.getElementById('suburbClear');
 const resultChip = document.getElementById('resultChip');
 
-function renderDrop(q) {
-    const list = q.length === 0 ? ['All Suburbs', ...suburbs] : ['All Suburbs', ...suburbs.filter(s => s.toLowerCase().includes(q.toLowerCase()))];
-    subDrop.innerHTML = list.slice(0,60).map(s => {
+function renderSuburbDrop(q) {
+    const list = q.length === 0
+        ? ['All Suburbs', ...suburbs]
+        : ['All Suburbs', ...suburbs.filter(s => s.toLowerCase().includes(q.toLowerCase()))];
+    subDrop.innerHTML = list.slice(0, 60).map(s => {
         const v = s === 'All Suburbs' ? 'ALL' : s;
-        return `<div class="suburb-opt ${v===selSuburb?'selected':''}" data-v="${v}">${s}</div>`;
+        return `<div class="suburb-opt ${v === selSuburb ? 'selected' : ''}" data-v="${v}">${s}</div>`;
     }).join('');
-    if (list.length === 0) subDrop.innerHTML = '<div class="suburb-opt no-results">No results</div>';
+    if (!list.length) subDrop.innerHTML = '<div class="suburb-opt no-results">No results</div>';
     subDrop.querySelectorAll('.suburb-opt:not(.no-results)').forEach(el => {
-        el.addEventListener('mousedown', e => { e.preventDefault(); setSuburb(el.dataset.v); subDrop.classList.remove('open'); });
+        el.addEventListener('mousedown', e => {
+            e.preventDefault();
+            setSuburb(el.dataset.v);
+            subDrop.classList.remove('open');
+        });
     });
 }
-
 function setSuburb(v) {
-    selSuburb = v; subInput.value = v === 'ALL' ? '' : v; subClear.classList.toggle('show', v !== 'ALL');
+    selSuburb = v;
+    subInput.value = v === 'ALL' ? '' : v;
+    subClear.classList.toggle('show', v !== 'ALL');
     resultChip.innerHTML = v !== 'ALL' ? `<div class="result-chip">◉ ${v}</div>` : '';
     if (v !== 'ALL' && allData.length) {
-        const row = allData.find(r => r.Suburb === v);
-        if (row && row.Latitude) map.setView([row.Latitude, row.Longitude], 13);
+        const r = allData.find(r => r.Suburb === v);
+        if (r) map.setView([r.Latitude, r.Longitude], 13);
     }
     applyFilters();
 }
-
-subInput.addEventListener('focus', () => { renderDrop(subInput.value); subDrop.classList.add('open'); });
-subInput.addEventListener('input', () => { renderDrop(subInput.value); subDrop.classList.add('open'); });
+subInput.addEventListener('focus', () => { renderSuburbDrop(subInput.value); subDrop.classList.add('open'); });
+subInput.addEventListener('input', () => { renderSuburbDrop(subInput.value); subDrop.classList.add('open'); });
 subInput.addEventListener('blur',  () => setTimeout(() => subDrop.classList.remove('open'), 160));
 subClear.addEventListener('click', () => setSuburb('ALL'));
 
-/* ── PRICE RANGE INPUTS ── */
-function parsePriceInput(v) {
+function parsePrice(v) {
     if (!v) return null;
-    v = v.replace(/,/g,'').trim().toLowerCase();
-    if (v.endsWith('m')) return parseFloat(v) * 1000000;
-    if (v.endsWith('k')) return parseFloat(v) * 1000;
-    return parseFloat(v) || null;
+    v = v.replace(/,/g, '').trim().toLowerCase();
+    if (v.endsWith('m')) return parseFloat(v) * 1_000_000;
+    if (v.endsWith('k')) return parseFloat(v) * 1_000;
+    const n = parseFloat(v);
+    if (isNaN(n)) return null;
+    return n * 1000;
 }
-
-const priceMinEl  = document.getElementById('priceMin');
-const priceMaxEl  = document.getElementById('priceMax');
-
-const processPriceFilter = debounce(() => {
-    priceMinVal = parsePriceInput(priceMinEl.value);
-    priceMaxVal = parsePriceInput(priceMaxEl.value);
+const priceMinEl = document.getElementById('priceMin');
+const priceMaxEl = document.getElementById('priceMax');
+const onPriceChange = debounce(() => {
+    priceMinVal = parsePrice(priceMinEl.value);
+    priceMaxVal = parsePrice(priceMaxEl.value);
     applyFilters();
 }, 250);
-
-priceMinEl.addEventListener('input', processPriceFilter);
-priceMaxEl.addEventListener('input', processPriceFilter);
-
+priceMinEl.addEventListener('input', onPriceChange);
+priceMaxEl.addEventListener('input', onPriceChange);
 document.getElementById('priceClearBtn').addEventListener('click', () => {
-    priceMinEl.value = ''; priceMaxEl.value = ''; priceMinVal = null; priceMaxVal = null; applyFilters();
+    priceMinEl.value = ''; priceMaxEl.value = '';
+    priceMinVal = null; priceMaxVal = null;
+    applyFilters();
 });
-document.getElementById('showWithheld').addEventListener('change', function() { showWithheld = this.checked; applyFilters(); });
 
-/* ── TYPE PILLS ── */
+document.getElementById('bedsWrap').addEventListener('click', e => {
+    const b = e.target.closest('.beds-btn');
+    if (!b) return;
+    document.querySelectorAll('.beds-btn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    activeBeds = b.dataset.b;
+    applyFilters();
+});
+
+document.getElementById('signalSeg').addEventListener('click', e => {
+    const b = e.target.closest('.signal-seg-btn');
+    if (!b) return;
+    document.querySelectorAll('.signal-seg-btn').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    activeSignal = b.dataset.s;
+    applyFilters();
+});
+
 document.getElementById('typePills').addEventListener('click', e => {
-    const pill = e.target.closest('.type-pill');
-    if (!pill) return;
-    document.querySelectorAll('.type-pill').forEach(p => p.classList.remove('on'));
-    pill.classList.add('on');
-    activeType = pill.dataset.t; applyFilters();
+    const p = e.target.closest('.type-pill');
+    if (!p) return;
+    document.querySelectorAll('.type-pill').forEach(x => x.classList.remove('on'));
+    p.classList.add('on');
+    activeType = p.dataset.t;
+    applyFilters();
 });
 
-function buildTypes(data) {
+function buildTypePills(data) {
     const types = [...new Set(data.map(r => r.Property_Type).filter(Boolean))].sort();
     const wrap = document.getElementById('typePills');
     wrap.innerHTML = '<div class="type-pill on" data-t="ALL">All Types</div>';
     types.forEach(t => {
         const d = document.createElement('div');
-        d.className = 'type-pill'; d.dataset.t = t; d.textContent = t; wrap.appendChild(d);
+        d.className = 'type-pill';
+        d.dataset.t = t;
+        d.textContent = t;
+        wrap.appendChild(d);
     });
 }
 
-/* ── LOAD ── */
+/* ════════════════════════════════════════════════════════════
+   LOAD DATA
+   ════════════════════════════════════════════════════════════ */
 window.onload = () => {
-    updateLegend(); // Khởi tạo legend lúc load
-    Papa.parse("data/melbourne_price_data.csv", {
-        download: true, header: true, dynamicTyping: true, skipEmptyLines: true,
+    updateLegend();
+    Papa.parse('production/output/predictions_for_sale.csv', {
+        download: true,
+        header: true,
+        dynamicTyping: true,
+        skipEmptyLines: true,
         complete: res => {
-            if (!res.data?.length) return;
-            allData = res.data.filter(r => r.Latitude && r.Longitude);
+            if (!res.data?.length) {
+                document.getElementById('statTotal').textContent = '0';
+                console.error('No rows in predictions CSV');
+                return;
+            }
+            allData = res.data.filter(r => r.Latitude && r.Longitude && r.Predicted_Price);
             suburbs = [...new Set(allData.map(r => r.Suburb).filter(Boolean))].sort();
-            buildTypes(allData);
-            
-            // Xử lý Last Updated Date
-            let maxUpdatedDate = 0;
-            
-            // Xử lý tạo cột Year và tìm ngày cập nhật mới nhất
-            let minYear = 2030, maxYear = 1900;
-            allData.forEach(r => {
-                const ym = (r.Date || '').match(/\d{4}/);
-                if (ym) {
-                    r.Year = parseInt(ym[0]);
-                    if (r.Status === 'Sold') {
-                        if (r.Year < minYear) minYear = r.Year;
-                        if (r.Year > maxYear) maxYear = r.Year;
-                    }
-                } else {
-                    r.Year = null;
-                }
-                
-                // Cập nhật Last Updated Date
-                if (r.Last_Updated) {
-                    // Xóa dấu gạch nối để chuyển thành số (VD: 2026-03-15 -> 20260315)
-                    let numDate = parseInt(r.Last_Updated.replace(/-/g, ''));
-                    if (!isNaN(numDate) && numDate > maxUpdatedDate) {
-                        maxUpdatedDate = numDate;
-                    }
-                }
-            });
-            
-            // Cập nhật text "Updated on..."
-            if (maxUpdatedDate > 0) {
-                let dateStr = maxUpdatedDate.toString();
-                // Định dạng lại thành YYYY-MM-DD
-                let formattedDate = `${dateStr.substring(0,4)}-${dateStr.substring(4,6)}-${dateStr.substring(6,8)}`;
-                document.getElementById('lastUpdatedText').textContent = `Updated on ${formattedDate}`;
-            } else {
-                 document.getElementById('lastUpdatedText').textContent = `Data Active`;
-            }
-            
-            if (minYear <= maxYear) {
-                ysMin.min = minYear - 1; ysMin.max = maxYear; ysMin.value = minYear - 1;
-                ysMax.min = minYear - 1; ysMax.max = maxYear; ysMax.value = maxYear;
-                updateYearSlider();
-            }
+            buildTypePills(allData);
 
+            let maxDate = '';
+            allData.forEach(r => { if (r.Last_Updated && r.Last_Updated > maxDate) maxDate = r.Last_Updated; });
+            document.getElementById('lastUpdatedText').textContent =
+                maxDate ? `Updated on ${maxDate}` : 'Data Active';
+
+            populatePredictForm();
             applyFilters();
+        },
+        error: err => {
+            document.getElementById('lastUpdatedText').textContent = 'Failed to load';
+            console.error('CSV load error:', err);
         }
     });
 };
 
-/* ── FILTERS ── */
+/* ════════════════════════════════════════════════════════════
+   APPLY FILTERS
+   ════════════════════════════════════════════════════════════ */
 function applyFilters() {
     let data = allData;
-    
-    // 1. Filter by Status
-    if (activeStatus !== 'ALL') data = data.filter(r => r.Status === activeStatus);
-    
-    // 2. Filter by Year (Chỉ áp dụng nếu đang ở Tab Sold)
-    if (activeStatus === 'Sold') {
-        if (activeYearMin !== 'ALL' || activeYearMax !== 'ALL') {
-            data = data.filter(r => r.Year >= activeYearMin && r.Year <= activeYearMax);
-        }
-    }
-    
-    // 3. Filter by Suburb
     if (selSuburb !== 'ALL') data = data.filter(r => r.Suburb === selSuburb);
-    
-    // 4. Filter by Price
-    data = data.filter(r => {
-        const p = r.Numeric_Price; const hasPrice = p && !isNaN(p);
-        if (!hasPrice) return showWithheld;
-        if (priceMinVal !== null && p < priceMinVal) return false;
-        if (priceMaxVal !== null && p > priceMaxVal) return false;
-        return true;
-    });
-    
-    // 5. Filter by Type
     if (activeType !== 'ALL') data = data.filter(r => r.Property_Type === activeType);
-    
-    currentFilteredData = data;
-    calculateStatsAndRenderCharts(data);
+    if (activeBeds !== 'any') {
+        const b = parseInt(activeBeds);
+        data = data.filter(r => {
+            if (r.Beds == null || isNaN(r.Beds)) return false;
+            return b === 5 ? r.Beds >= 5 : r.Beds === b;
+        });
+    }
+    if (activeSignal !== 'ALL') data = data.filter(r => r.Deal_Signal === activeSignal);
+    if (priceMinVal !== null) data = data.filter(r => r.Predicted_Price >= priceMinVal);
+    if (priceMaxVal !== null) data = data.filter(r => r.Predicted_Price <= priceMaxVal);
+
+    filteredData = data;
+    computeStats(data);
     renderMap(data);
+    renderCharts(data);
 }
 
-/* ── DATA PROCESSING & CHARTS ── */
-function calculateStatsAndRenderCharts(data) {
-    let tPrice=0, nPrice=0;
-    let typeCnt={}; let bDist={'1 Bed':0,'2 Beds':0,'3 Beds':0,'4 Beds':0,'5+ Beds':0};
-    let prices = [];
+/* ════════════════════════════════════════════════════════════
+   STATS
+   ════════════════════════════════════════════════════════════ */
+function computeStats(data) {
     cachedSuburbStats = {};
-
-    data.forEach(row => {
-        const sub = row.Suburb;
-        if(sub) {
-            // Lưu tổng lat, lon để lấy center dự phòng nếu GeoJSON bị thiếu
-            if(!cachedSuburbStats[sub]) cachedSuburbStats[sub] = { prices: [], count: 0, latSum: 0, lonSum: 0 };
-            cachedSuburbStats[sub].count++;
-            if (row.Latitude && row.Longitude) {
-                cachedSuburbStats[sub].latSum += row.Latitude;
-                cachedSuburbStats[sub].lonSum += row.Longitude;
-            }
-        }
-
-        const p = row.Numeric_Price;
-        if (p && !isNaN(p)) {
-            tPrice += p; nPrice++; prices.push(p);
-            if(sub) cachedSuburbStats[sub].prices.push(p);
-        }
-        
-        const b = row.Beds;
-        if (b && !isNaN(b)) {
-            if(b===1) bDist['1 Bed']++; else if(b===2) bDist['2 Beds']++; else if(b===3) bDist['3 Beds']++; else if(b===4) bDist['4 Beds']++; else bDist['5+ Beds']++;
-        }
-        const t = row.Property_Type || 'Unknown'; typeCnt[t] = (typeCnt[t]||0) + 1;
+    let prices = [], goodN = 0, overN = 0;
+    data.forEach(r => {
+        prices.push(r.Predicted_Price);
+        if (r.Deal_Signal === 'Good Deal') goodN++;
+        if (r.Deal_Signal === 'Overpriced') overN++;
+        const s = r.Suburb;
+        if (!s) return;
+        if (!cachedSuburbStats[s]) cachedSuburbStats[s] = { prices: [], count: 0, lats: [], lons: [] };
+        cachedSuburbStats[s].prices.push(r.Predicted_Price);
+        cachedSuburbStats[s].count++;
+        if (r.Latitude) cachedSuburbStats[s].lats.push(r.Latitude);
+        if (r.Longitude) cachedSuburbStats[s].lons.push(r.Longitude);
     });
-
-    // Calculate Suburb Medians, Means, and Centroids
-    for (let sub in cachedSuburbStats) {
-        let stats = cachedSuburbStats[sub];
-        stats.lat = stats.latSum / stats.count;
-        stats.lon = stats.lonSum / stats.count;
-        
-        let arr = stats.prices;
-        if (arr.length > 0) {
-            arr.sort((a,b)=>a-b);
-            stats.min = arr[0];
-            stats.max = arr[arr.length-1];
-            stats.mean = arr.reduce((a,b)=>a+b,0) / arr.length;
-            stats.median = arr.length%2===0 ? (arr[arr.length/2-1]+arr[arr.length/2])/2 : arr[Math.floor(arr.length/2)];
-        } else {
-            stats.min=0; stats.max=0; stats.mean=0; stats.median=0;
-        }
+    for (const s in cachedSuburbStats) {
+        const stats = cachedSuburbStats[s];
+        const arr = stats.prices.sort((a,b)=>a-b);
+        const n = arr.length;
+        stats.median = n % 2 === 0 ? (arr[n/2-1]+arr[n/2])/2 : arr[Math.floor(n/2)];
+        stats.mean = arr.reduce((a,b)=>a+b,0) / n;
+        stats.min = arr[0];
+        stats.max = arr[n-1];
+        stats.lat = stats.lats.length ? stats.lats.reduce((a,b)=>a+b,0)/stats.lats.length : null;
+        stats.lon = stats.lons.length ? stats.lons.reduce((a,b)=>a+b,0)/stats.lons.length : null;
     }
-
     prices.sort((a,b)=>a-b);
-    const median = prices.length ? (prices.length%2===0 ? (prices[prices.length/2-1]+prices[prices.length/2])/2 : prices[Math.floor(prices.length/2)]) : 0;
+    const median = prices.length === 0 ? 0
+        : prices.length % 2 === 0
+            ? (prices[prices.length/2-1]+prices[prices.length/2])/2
+            : prices[Math.floor(prices.length/2)];
 
     document.getElementById('statTotal').textContent = data.length.toLocaleString();
-    document.getElementById('statAvgPrice').textContent = nPrice ? '$'+Math.round(tPrice/nPrice).toLocaleString() : '—';
-    document.getElementById('statMedian').textContent = median ? '$'+Math.round(median).toLocaleString() : '—';
-    document.getElementById('statSuburbs').textContent = Object.keys(cachedSuburbStats).length.toLocaleString();
-
-    let subCnt = {}; for(let s in cachedSuburbStats) subCnt[s] = cachedSuburbStats[s].count;
-
-    drawSuburbVolume(subCnt); drawSuburbPrice(); drawHistogram(prices); drawType(typeCnt); drawBeds(bDist);
+    document.getElementById('statTotalSub').textContent = 'of ' + allData.length.toLocaleString();
+    document.getElementById('statMedian').textContent = median ? fmtMoney(median) : '-';
+    document.getElementById('statGood').textContent = goodN.toLocaleString();
+    document.getElementById('statGoodSub').textContent = data.length ? (goodN/data.length*100).toFixed(1)+'% of filtered' : '-';
+    document.getElementById('statOver').textContent = overN.toLocaleString();
+    document.getElementById('statOverSub').textContent = data.length ? (overN/data.length*100).toFixed(1)+'% of filtered' : '-';
 }
 
-/* ── MAP RENDER ── */
+/* ════════════════════════════════════════════════════════════
+   RENDER MAP
+   ════════════════════════════════════════════════════════════ */
 function renderMap(data) {
-    // Xóa sạch các layer cũ trước khi vẽ lại
     markerLayer.clearLayers();
-    if(choroLayer) { map.removeLayer(choroLayer); choroLayer = null; }
-    if(suburbLayer) { map.removeLayer(suburbLayer); suburbLayer = null; }
+    if (choroLayer) { map.removeLayer(choroLayer); choroLayer = null; }
 
     if (mapMode === 'points') {
         const r0 = dotRadius(map.getZoom());
         data.forEach(row => {
-            const p = row.Numeric_Price;
-            const color = RANGE_COLORS[priceRange(p)];
-            const badgeCls = row.Status === 'Sold' ? 'badge-sold' : 'badge-sale';
-            
-            const popup = `
-            <div class="popup-body">
-            <div class="popup-header-row">
-                <span class="popup-badge ${badgeCls}">${row.Status || 'Listed'}</span>
-                <span class="popup-date">${row.Date || ''}</span>
-            </div>
-            <div class="popup-addr">${row.Full_Address || 'Address unavailable'}</div>
-            <div class="popup-price" style="color:${color}">${p ? '$'+p.toLocaleString() : (row.Raw_Price||'Price Withheld')}</div>
-            <div class="popup-specs">
-                <div class="spec"><div class="spec-l">Type</div><div class="spec-v">${row.Property_Type || 'N/A'}</div></div>
-                <div class="spec"><div class="spec-l">Beds</div><div class="spec-v">${row.Beds || '—'}</div></div>
-                <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${row.Baths || '—'}</div></div>
-                <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${row.Car_Spaces!=null ? row.Car_Spaces : '—'}</div></div>
-                <div class="spec"><div class="spec-l">To CBD</div><div class="spec-v">${row.Distance_to_CBD_km ? row.Distance_to_CBD_km+' km' : '—'}</div></div>
-                <div class="spec"><div class="spec-l">Land Area</div><div class="spec-v" style="white-space:normal">${row.LandSize_sqm ? row.LandSize_sqm + ' m²' : 'N/A'}</div></div>
-            </div>
-            ${row.URL && row.URL!=='N/A' ? `<a href="${row.URL}" target="_blank" class="popup-btn">View Listing →</a>` : ''}
+            const sig = row.Deal_Signal || 'No Asking Price';
+            const color = SIGNAL_COLORS[sig] || '#94a3b8';
+            const badgeCls = SIGNAL_BADGE_CLS[sig];
+
+            const asking = row.Numeric_Price ? fmtMoneyFull(row.Numeric_Price) : '-';
+            const beds  = row.Beds  != null && !isNaN(row.Beds)  ? row.Beds  : '-';
+            const baths = row.Baths != null && !isNaN(row.Baths) ? row.Baths : '-';
+            const cars  = row.Car_Spaces != null && !isNaN(row.Car_Spaces) ? row.Car_Spaces : '-';
+            const land  = row.LandSize_sqm ? row.LandSize_sqm + ' m²' : '-';
+            const cbd   = row.Distance_to_CBD_km ? row.Distance_to_CBD_km.toFixed(1) + ' km' : '-';
+
+            const popup = `<div class="popup-body">
+                <span class="popup-badge ${badgeCls}">${sig}</span>
+                <div class="popup-suburb">${row.Suburb || ''}</div>
+                <div class="popup-meta">${row.Property_Type || '-'} · Postcode ${row.Postcode || '-'}</div>
+                <div class="popup-price">${fmtMoneyFull(row.Predicted_Price)}</div>
+                <div class="popup-range">Range ${fmtMoneyFull(row.Predicted_Price_Lower)} – ${fmtMoneyFull(row.Predicted_Price_Upper)} (${row.Interval_Width_Pct}%)</div>
+                <div class="popup-asking">Asking: <b>${asking}</b></div>
+                <div class="popup-specs">
+                    <div class="spec"><div class="spec-l">Beds</div><div class="spec-v">${beds}</div></div>
+                    <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${baths}</div></div>
+                    <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${cars}</div></div>
+                    <div class="spec"><div class="spec-l">Land</div><div class="spec-v">${land}</div></div>
+                    <div class="spec"><div class="spec-l">To CBD</div><div class="spec-v">${cbd}</div></div>
+                    <div class="spec"><div class="spec-l">Updated</div><div class="spec-v">${row.Last_Updated || '-'}</div></div>
+                </div>
+                ${row.URL && String(row.URL).startsWith('http') ? `<a class="popup-btn" href="${row.URL}" target="_blank" rel="noopener">View on Domain →</a>` : ''}
             </div>`;
-            
-            // Sử dụng L.circleMarker giúp điểm cố định kích thước khi zoom ra/vào
+
             L.circleMarker([row.Latitude, row.Longitude], {
-                radius: r0, fillColor: color, color: 'rgba(255,255,255,0.6)', weight: 1.2, opacity: 1, fillOpacity: 0.85
-            }).bindPopup(popup, {maxWidth: 300}).addTo(markerLayer);
+                radius: r0, fillColor: color, color: 'rgba(255,255,255,0.7)',
+                weight: 1, opacity: 1, fillOpacity: 0.85,
+            }).bindPopup(popup, { maxWidth: 300 }).addTo(markerLayer);
         });
-    } 
-    else if (mapMode === 'proportional') {
-        // Khởi tạo Layer cho các cục Bubbles
-        suburbLayer = L.layerGroup().addTo(map);
-
-        if(geojsonData) {
-            // Vẽ ranh giới đa giác (Chỉ vẽ viền mờ)
-            choroLayer = L.geoJSON(geojsonData, {
-                style: { color: '#94a3b8', weight: 1, fillColor: 'transparent', fillOpacity: 0 },
-                interactive: false, // Để ranh giới không cản trở việc click vào bubbles
-                onEachFeature: function(feature, layer) {
-                    const subName = String(feature.properties.Suburb).toUpperCase();
-                    const stats = cachedSuburbStats[subName];
-                    
-                    if (stats && stats.count > 0) {
-                        // Tính toán tâm của đa giác Suburb để đặt Bubble chính xác nhất
-                        const center = layer.getBounds().getCenter();
-                        
-                        let fillColor = '#cbd5e1';
-                        if(stats.median > 0) fillColor = RANGE_COLORS[priceRange(stats.median)];
-
-                        // Công thức chỉnh Size đã sửa nhỏ lại
-                        let radius = 4 + Math.sqrt(stats.count) * 0.5;
-                        if (radius > 18) radius = 18; // Giới hạn max là 18px
-
-                        const tt = `<div class="choro-tooltip">
-                                        <div class="choro-title">${subName}</div>
-                                        <div class="choro-stat"><span>Properties:</span> <b>${stats.count}</b></div>
-                                        <div class="choro-stat"><span>Median:</span> <b>$${stats.median > 0 ? stats.median.toLocaleString() : 'N/A'}</b></div>
-                                        <div class="choro-stat"><span>Mean:</span> <b>$${stats.mean > 0 ? Math.round(stats.mean).toLocaleString() : 'N/A'}</b></div>
-                                        <div class="choro-stat"><span>Min:</span> <b>$${stats.min > 0 ? stats.min.toLocaleString() : 'N/A'}</b></div>
-                                        <div class="choro-stat"><span>Max:</span> <b>$${stats.max > 0 ? stats.max.toLocaleString() : 'N/A'}</b></div>
-                                    </div>`;
-                        
-                        // circleMarker giúp bóng bóng không đổi size khi zoom
-                        L.circleMarker(center, {
-                            radius: radius, fillColor: fillColor, color: '#ffffff', weight: 1.5, opacity: 1, fillOpacity: 0.85
-                        }).bindTooltip(tt, {sticky: true, direction: 'top', className: 'leaflet-tooltip-own'}).addTo(suburbLayer);
-                    }
-                }
-            }).addTo(map);
-        } else {
-            // Fallback: Nếu không tải được GeoJSON, lấy tọa độ trung bình từ CSV để vẽ Bubbles
-            for (let sub in cachedSuburbStats) {
-                const stats = cachedSuburbStats[sub];
-                if (stats.count === 0 || !stats.lat || !stats.lon || isNaN(stats.lat)) continue;
-
-                let fillColor = '#cbd5e1';
-                if(stats.median > 0) fillColor = RANGE_COLORS[priceRange(stats.median)];
-
-                // Sửa kích thước nhỏ lại ở Fallback
-                let radius = 4 + Math.sqrt(stats.count) * 0.5;
-                if (radius > 18) radius = 18;
-
-                const tt = `<div class="choro-tooltip">
-                                <div class="choro-title">${sub}</div>
-                                <div class="choro-stat"><span>Properties:</span> <b>${stats.count}</b></div>
-                                <div class="choro-stat"><span>Median:</span> <b>$${stats.median > 0 ? stats.median.toLocaleString() : 'N/A'}</b></div>
-                                <div class="choro-stat"><span>Mean:</span> <b>$${stats.mean > 0 ? Math.round(stats.mean).toLocaleString() : 'N/A'}</b></div>
-                                <div class="choro-stat"><span>Min:</span> <b>$${stats.min > 0 ? stats.min.toLocaleString() : 'N/A'}</b></div>
-                                <div class="choro-stat"><span>Max:</span> <b>$${stats.max > 0 ? stats.max.toLocaleString() : 'N/A'}</b></div>
-                            </div>`;
-                
-                L.circleMarker([stats.lat, stats.lon], {
-                    radius: radius, fillColor: fillColor, color: '#ffffff', weight: 1.5, opacity: 1, fillOpacity: 0.85
-                }).bindTooltip(tt, {sticky: true, direction: 'top', className: 'leaflet-tooltip-own'}).addTo(suburbLayer);
-            }
-        }
-    }
-}
-
-/* ── SUBURB PRICE TOGGLE CẬP NHẬT ── */
-window.setSuburbPriceMode = function(mode) {
-    suburbPriceMode = mode;
-    // Sử dụng classList add/remove thay vì toggle(..., boolean) để tránh lỗi tương thích
-    if (mode === 'highest') {
-        document.getElementById('btnHighest').classList.add('active');
-        document.getElementById('btnLowest').classList.remove('active');
     } else {
-        document.getElementById('btnHighest').classList.remove('active');
-        document.getElementById('btnLowest').classList.add('active');
+        if (!geojsonData) return;
+        choroLayer = L.geoJSON(geojsonData, {
+            style: feat => {
+                const name = String(feat.properties.Suburb || feat.properties.suburb || '').toUpperCase();
+                const stats = cachedSuburbStats[name];
+                if (stats && stats.median > 0) {
+                    return { fillColor: priceBucketColor(stats.median), color: '#ffffff', weight: 0.7, fillOpacity: 0.72 };
+                }
+                return { fillColor: '#cbd5e1', color: '#ffffff', weight: 0.5, fillOpacity: 0.18 };
+            },
+            onEachFeature: (feat, layer) => {
+                const name = String(feat.properties.Suburb || feat.properties.suburb || '').toUpperCase();
+                const stats = cachedSuburbStats[name];
+                const tt = stats ?
+                    `<div class="choro-tooltip">
+                        <div class="choro-title">${name}</div>
+                        <div class="choro-stat"><span>Listings</span><b>${stats.count}</b></div>
+                        <div class="choro-stat"><span>Median</span><b>${fmtMoneyFull(stats.median)}</b></div>
+                        <div class="choro-stat"><span>Mean</span><b>${fmtMoneyFull(stats.mean)}</b></div>
+                        <div class="choro-stat"><span>Min</span><b>${fmtMoneyFull(stats.min)}</b></div>
+                        <div class="choro-stat"><span>Max</span><b>${fmtMoneyFull(stats.max)}</b></div>
+                    </div>` :
+                    `<div class="choro-tooltip"><div class="choro-title">${name}</div><div class="choro-stat">No listings in filter</div></div>`;
+                layer.bindTooltip(tt, { sticky: true, direction: 'top' });
+                layer.on('mouseover', () => layer.setStyle({ weight: 2.5, color: '#1a1d27' }));
+                layer.on('mouseout', () => choroLayer.resetStyle(layer));
+                layer.on('click', () => setSuburb(name));
+            }
+        }).addTo(map);
     }
-    drawSuburbPrice();
 }
 
-/* ── CHARTS ── */
-function destroyChart(k) { if(charts[k]){charts[k].destroy(); delete charts[k];} }
+map.on('zoomend', () => {
+    if (mapMode === 'points') {
+        const r = dotRadius(map.getZoom());
+        markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
+    }
+});
 
-function drawSuburbVolume(subCnt) {
-    destroyChart('suburbVol');
-    const sorted = Object.entries(subCnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
-    const ctx = document.getElementById('suburbChart').getContext('2d');
-    charts.suburbVol = new Chart(ctx, {
-        type: 'bar', data: { labels: sorted.map(i=>i[0]), datasets: [{ data: sorted.map(i=>i[1]), backgroundColor: 'rgba(37,99,235,0.1)', hoverBackgroundColor: 'rgba(37,99,235,0.22)', borderColor: 'rgba(37,99,235,0.5)', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.62 }] },
-        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>' '+c.parsed.x.toLocaleString()+' properties'}} }, scales:{ x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}}}, y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}} } }
+document.getElementById('btnMapPoints').addEventListener('click', () => {
+    if (mapMode === 'points') return;
+    mapMode = 'points';
+    document.getElementById('btnMapPoints').classList.add('active');
+    document.getElementById('btnMapChoro').classList.remove('active');
+    updateLegend();
+    renderMap(filteredData);
+});
+document.getElementById('btnMapChoro').addEventListener('click', () => {
+    if (mapMode === 'choro') return;
+    mapMode = 'choro';
+    document.getElementById('btnMapPoints').classList.remove('active');
+    document.getElementById('btnMapChoro').classList.add('active');
+    updateLegend();
+    renderMap(filteredData);
+});
+
+/* ════════════════════════════════════════════════════════════
+   CHARTS
+   ════════════════════════════════════════════════════════════ */
+function destroyChart(k) { if (charts[k]) { charts[k].destroy(); delete charts[k]; } }
+
+function renderCharts(data) {
+    drawPriceHist(data);
+    drawSignalDonut(data);
+    drawTypeBar(data);
+    drawSuburbVol();
+    drawTopSuburbs();
+    drawScatter(data);
+}
+
+function drawPriceHist(data) {
+    destroyChart('priceHist');
+    if (!data.length) return;
+    const BIN = 250000, MAX = 5000000, bins = [];
+    for (let lo = 0; lo < MAX; lo += BIN) bins.push({ label: '$' + (lo+BIN)/1000 + 'k', min: lo, max: lo+BIN });
+    bins.push({ label: '>$5M', min: MAX, max: Infinity });
+    const counts = bins.map(b => data.filter(r => r.Predicted_Price >= b.min && r.Predicted_Price < b.max).length);
+    const colors = bins.map(b => priceBucketColor(b.max === Infinity ? 6_000_000 : (b.min+b.max)/2));
+    const ctx = document.getElementById('priceHistChart').getContext('2d');
+    charts.priceHist = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: bins.map(b => b.label),
+                datasets: [{ data: counts, backgroundColor: colors.map(c => c+'28'),
+                             borderColor: colors, borderWidth: 1.5, barPercentage: 1, categoryPercentage: 1 }] },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false },
+                       tooltip: { callbacks: {
+                           title: items => { const b = bins[items[0].dataIndex]; return `${b.min===0?'$0':'$'+b.min/1000+'k'} – ${b.max===Infinity?'∞':'$'+b.max/1000+'k'}`; },
+                           label: c => '  ' + c.parsed.y.toLocaleString() + ' listings' } } },
+            scales: { x: { grid: { display: false }, ticks: { color: '#7c8499', font: { size: 10 }, maxRotation: 45, minRotation: 45 } },
+                      y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7c8499' } } }
+        }
     });
 }
 
-function drawSuburbPrice() {
-    destroyChart('suburbPrice');
-    
-    // Đã thêm ĐIỀU KIỆN "e[1].count >= 3" để LỌC BỎ dữ liệu rác/ít giao dịch làm hỏng chart Lowest
-    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].median > 0 && e[1].count >= 3);
-    if (!entries.length) return;
-    
-    // Sort an toàn
-    const sorted = entries.sort((a,b) => suburbPriceMode==='highest' ? b[1].median-a[1].median : a[1].median-b[1].median).slice(0,10);
-    
-    const color = suburbPriceMode==='highest' ? '#e11d48' : '#059669'; 
-    const bgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.08)' : 'rgba(5,150,105,0.08)';
-    const hoverBgAlpha = suburbPriceMode==='highest' ? 'rgba(225,29,72,0.18)' : 'rgba(5,150,105,0.18)';
-
-    const ctx = document.getElementById('suburbPriceChart').getContext('2d');
-    charts.suburbPrice = new Chart(ctx, {
-        type: 'bar', data: { labels: sorted.map(i=>i[0]), datasets: [{ data: sorted.map(i=>Math.round(i[1].median)), backgroundColor: bgAlpha, hoverBackgroundColor: hoverBgAlpha, borderColor: color+'99', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.62 }] },
-        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:c=>' $'+c.parsed.x.toLocaleString()}} }, scales:{ x:{grid:{color:'rgba(0,0,0,0.05)'}, border:{display:false}, ticks:{color:'#7c8499',font:{size:11}, callback:v=>'$'+(v>=1000000?(v/1000000).toFixed(1)+'M':(v/1000).toFixed(0)+'k')}}, y:{grid:{display:false}, border:{display:false}, ticks:{color:'#4a5168',font:{size:12,weight:'500'}}} } }
+function drawSignalDonut(data) {
+    destroyChart('signal');
+    const cnt = {};
+    data.forEach(r => { cnt[r.Deal_Signal] = (cnt[r.Deal_Signal]||0)+1; });
+    const labels = Object.keys(cnt);
+    if (!labels.length) return;
+    const ctx = document.getElementById('signalChart').getContext('2d');
+    charts.signal = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels, datasets: [{
+            data: labels.map(l => cnt[l]),
+            backgroundColor: labels.map(l => SIGNAL_COLORS[l] + '35'),
+            borderColor: labels.map(l => SIGNAL_COLORS[l]),
+            borderWidth: 2, hoverOffset: 10 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+                   plugins: { legend: { position: 'bottom', labels: { padding: 14, usePointStyle: true, pointStyle: 'circle', color: '#4a5168', font: { size: 12 } } },
+                              tooltip: { callbacks: { label: c => `  ${c.label}: ${c.parsed.toLocaleString()} (${(c.parsed/data.length*100).toFixed(1)}%)` } } } }
     });
 }
 
-function drawHistogram(prices) {
-    destroyChart('price'); if (!prices.length) return;
-    const BIN = 250000; const MAX_BIN = 5000000; const bins = [];
-    for (let lo = 0; lo < MAX_BIN; lo += BIN) bins.push({ label: '$'+(lo+BIN)/1000+'k', min: lo, max: lo+BIN });
-    bins.push({ label: '>$5M', min: MAX_BIN, max: Infinity });
-    const counts = bins.map(b => prices.filter(p => p >= b.min && p < b.max).length);
-    const colors = bins.map(b => RANGE_COLORS[priceRange(b.max === Infinity ? 6000000 : (b.min+b.max)/2)]);
-    const ctx = document.getElementById('priceChart').getContext('2d');
-    charts.price = new Chart(ctx, {
-        type: 'bar', data: { labels: bins.map(b=>b.label), datasets: [{ data: counts, backgroundColor: colors.map(c=>c+'28'), borderColor: colors, borderWidth: 1.5, borderRadius: 0, barPercentage: 1.0, categoryPercentage: 1.0 }] },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => { const b = bins[items[0].dataIndex]; return `${b.min===0?'$0':'$'+b.min/1000+'k'} – ${b.max===Infinity?'∞':'$'+b.max/1000+'k'}`; }, label: c => ' ' + c.parsed.y.toLocaleString() + ' properties' } } }, scales: { x: { grid: { display: false }, border: { display: false }, ticks: { color: '#7c8499', font: { size: 9.5 }, maxRotation: 45, minRotation: 45 } }, y: { grid: { color: 'rgba(0,0,0,0.05)' }, border: { display: false }, ticks: { color: '#7c8499', font: { size: 11 } } } } }
-    });
-}
-
-function drawType(typeCnt) {
-    destroyChart('type'); if (!Object.keys(typeCnt).length) return;
-    const sortedEntries = Object.entries(typeCnt).sort((a,b) => b[1]-a[1]);
-    let labels, vals;
-    if (sortedEntries.length <= 8) { labels = sortedEntries.map(e => e[0]); vals = sortedEntries.map(e => e[1]); } else { labels = [...sortedEntries.slice(0,8).map(e=>e[0]), 'Other']; vals = [...sortedEntries.slice(0,8).map(e=>e[1]), sortedEntries.slice(8).reduce((s,e)=>s+e[1],0)]; }
-    const PALETTE = ['#2563eb', '#059669', '#d97706', '#7c3aed', '#0891b2', '#c2410c', '#65a30d', '#db2777', '#94a3b8'];
+function drawTypeBar(data) {
+    destroyChart('type');
+    const cnt = {};
+    data.forEach(r => { cnt[r.Property_Type || 'Unknown'] = (cnt[r.Property_Type || 'Unknown']||0)+1; });
+    const sorted = Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,10);
+    if (!sorted.length) return;
     const ctx = document.getElementById('typeChart').getContext('2d');
     charts.type = new Chart(ctx, {
-        type: 'doughnut', data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE.slice(0,labels.length).map(c=>c+'30'), borderColor: PALETTE.slice(0,labels.length), borderWidth: 2, hoverOffset: 10 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { position: 'bottom', labels: { padding: 12, usePointStyle: true, pointStyle: 'circle', color: '#4a5168', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => `  ${ctx.label}: ${ctx.parsed.toLocaleString()} (${((ctx.parsed/ctx.dataset.data.reduce((a,b)=>a+b,0))*100).toFixed(1)}%)` } } } }
+        type: 'bar',
+        data: { labels: sorted.map(e=>e[0]),
+                datasets: [{ data: sorted.map(e=>e[1]),
+                             backgroundColor: 'rgba(37,99,235,0.18)',
+                             borderColor: '#2563eb', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '  ' + c.parsed.x.toLocaleString() + ' listings' } } },
+                   scales: { x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7c8499', font: { size: 10 } } },
+                             y: { grid: { display: false }, ticks: { color: '#4a5168', font: { size: 11, weight: '500' } } } } }
     });
 }
 
-function drawBeds(bDist) {
-    destroyChart('beds');
-    const ctx = document.getElementById('bedsChart').getContext('2d');
-    const C = ['#2563eb','#059669','#d97706','#7c3aed','#94a3b8'];
-    charts.beds = new Chart(ctx, {
-        type: 'doughnut', data: { labels: Object.keys(bDist), datasets: [{ data: Object.values(bDist), backgroundColor: C.map(c=>c+'25'), borderColor: C, borderWidth: 2, hoverOffset: 8 }] },
-        options: { responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom', labels:{padding:14, usePointStyle:true, pointStyle:'circle', color:'#4a5168', font:{size:12}}}, tooltip:{callbacks:{label:c=>' '+c.label+': '+c.parsed.toLocaleString()}} } }
+function drawSuburbVol() {
+    destroyChart('suburbVol');
+    const entries = Object.entries(cachedSuburbStats).sort((a,b)=>b[1].count - a[1].count).slice(0,10);
+    if (!entries.length) return;
+    const ctx = document.getElementById('suburbVolChart').getContext('2d');
+    charts.suburbVol = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: entries.map(e=>e[0]),
+                datasets: [{ data: entries.map(e=>e[1].count),
+                             backgroundColor: 'rgba(124,58,237,0.15)',
+                             borderColor: '#7c3aed', borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '  ' + c.parsed.x.toLocaleString() + ' listings' } } },
+                   scales: { x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7c8499', font: { size: 10 } } },
+                             y: { grid: { display: false }, ticks: { color: '#4a5168', font: { size: 11, weight: '500' } } } } }
     });
 }
+
+function drawTopSuburbs() {
+    destroyChart('topSub');
+    const entries = Object.entries(cachedSuburbStats).filter(e => e[1].count >= 3 && e[1].median > 0);
+    if (!entries.length) return;
+    const sorted = topSubMode === 'highest'
+        ? entries.sort((a,b) => b[1].median - a[1].median).slice(0,15)
+        : entries.sort((a,b) => a[1].median - b[1].median).slice(0,15);
+    const color = topSubMode === 'highest' ? '#e11d48' : '#059669';
+    const bgColor = topSubMode === 'highest' ? 'rgba(225,29,72,0.15)' : 'rgba(5,150,105,0.15)';
+    const ctx = document.getElementById('topSuburbsChart').getContext('2d');
+    charts.topSub = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: sorted.map(e=>e[0]),
+                datasets: [{ data: sorted.map(e => Math.round(e[1].median)),
+                             backgroundColor: bgColor, borderColor: color,
+                             borderWidth: 1.5, borderRadius: 6, barPercentage: 0.65 }] },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => '  ' + fmtMoneyFull(c.parsed.x) } } },
+                   scales: { x: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7c8499', font: { size: 10 }, callback: v => fmtMoney(v) } },
+                             y: { grid: { display: false }, ticks: { color: '#4a5168', font: { size: 10.5, weight: '500' } } } } }
+    });
+}
+
+document.getElementById('btnTopHigh').addEventListener('click', () => {
+    topSubMode = 'highest';
+    document.getElementById('btnTopHigh').classList.add('active');
+    document.getElementById('btnTopLow').classList.remove('active');
+    drawTopSuburbs();
+});
+document.getElementById('btnTopLow').addEventListener('click', () => {
+    topSubMode = 'lowest';
+    document.getElementById('btnTopHigh').classList.remove('active');
+    document.getElementById('btnTopLow').classList.add('active');
+    drawTopSuburbs();
+});
+
+function drawScatter(data) {
+    destroyChart('scatter');
+    const xKey = scatterXKey;
+    const pts = data.filter(r => r[xKey] != null && !isNaN(r[xKey])).map(r => ({ x: r[xKey], y: r.Predicted_Price }));
+    if (!pts.length) return;
+    const sample = pts.length > 4000 ? sampleArr(pts, 4000) : pts;
+    const ctx = document.getElementById('scatterChart').getContext('2d');
+    charts.scatter = new Chart(ctx, {
+        type: 'scatter',
+        data: { datasets: [{
+            label: SCATTER_X_LABELS[xKey],
+            data: sample,
+            backgroundColor: 'rgba(37,99,235,0.35)',
+            borderColor: 'rgba(37,99,235,0.6)',
+            pointRadius: 2.2, pointHoverRadius: 4,
+        }] },
+        options: { responsive: true, maintainAspectRatio: false,
+                   plugins: { legend: { display: false },
+                              tooltip: { callbacks: { label: c => `${SCATTER_X_LABELS[xKey]}: ${c.parsed.x}, Predicted: ${fmtMoney(c.parsed.y)}` } } },
+                   scales: { x: { title: { display: true, text: SCATTER_X_LABELS[xKey], color: '#7c8499', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7c8499' } },
+                             y: { title: { display: true, text: 'Predicted price ($)', color: '#7c8499', font: { size: 11 } }, ticks: { callback: v => fmtMoney(v), color: '#7c8499' }, grid: { color: 'rgba(0,0,0,0.05)' } } } }
+    });
+}
+
+document.getElementById('scatterXSel').addEventListener('change', e => {
+    scatterXKey = e.target.value;
+    drawScatter(filteredData);
+});
+
+function sampleArr(arr, n) {
+    const out = []; const used = new Set();
+    while (out.length < n && used.size < arr.length) {
+        const i = Math.floor(Math.random() * arr.length);
+        if (!used.has(i)) { used.add(i); out.push(arr[i]); }
+    }
+    return out;
+}
+
+/* ════════════════════════════════════════════════════════════
+   PREDICT TAB - populate form
+   ════════════════════════════════════════════════════════════ */
+function populatePredictForm() {
+    const subSel = document.getElementById('pf_suburb');
+    subSel.innerHTML = suburbs.map(s => `<option value="${s}">${s}</option>`).join('');
+
+    const types = [...new Set(allData.map(r => r.Property_Type).filter(Boolean))].sort();
+    document.getElementById('pf_type').innerHTML = types.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    // Auto-fill defaults from suburb data.
+    subSel.addEventListener('change', () => {
+        const sub = subSel.value;
+        const row = allData.find(r => r.Suburb === sub);
+        if (row) {
+            document.getElementById('pf_postcode').value = row.Postcode || 3000;
+            document.getElementById('pf_cbd').value = row.Distance_to_CBD_km ? row.Distance_to_CBD_km.toFixed(1) : 10;
+        }
+    });
+    if (subSel.options.length > 0) subSel.dispatchEvent(new Event('change'));
+
+    document.getElementById('predictBtn').addEventListener('click', runPredict);
+}
+
+/* ════════════════════════════════════════════════════════════
+   PREDICT - load ONNX models lazily on first click
+   ════════════════════════════════════════════════════════════ */
+async function loadOnnxModels() {
+    if (onnxSessions.loaded || onnxSessions.loading) return;
+    onnxSessions.loading = true;
+    const state = document.getElementById('resultState');
+    state.classList.add('loading');
+    state.innerHTML = 'Loading model (~14 MB)...<div class="predict-loader-bar"></div>This happens once per session.';
+
+    try {
+        if (!preprocessorMeta) {
+            const r = await fetch('production/output/models/preprocessor_meta.json');
+            preprocessorMeta = await r.json();
+        }
+        const [point, q10, q90] = await Promise.all([
+            ort.InferenceSession.create('production/output/models/model.onnx'),
+            ort.InferenceSession.create('production/output/models/model_q10.onnx'),
+            ort.InferenceSession.create('production/output/models/model_q90.onnx'),
+        ]);
+        onnxSessions.point = point;
+        onnxSessions.q10 = q10;
+        onnxSessions.q90 = q90;
+        onnxSessions.loaded = true;
+    } catch (err) {
+        state.innerHTML = '<b style="color:#e11d48">Failed to load model.</b><br>' + err.message;
+        console.error(err);
+    } finally {
+        onnxSessions.loading = false;
+        state.classList.remove('loading');
+    }
+}
+
+/* ════════════════════════════════════════════════════════════
+   PREDICT - build feature vector (Lat/Lon derived from suburb)
+   ════════════════════════════════════════════════════════════ */
+function buildFeatureVector(input) {
+    const meta = preprocessorMeta;
+    const numericMeds = meta.numeric_medians;
+
+    const subKey = input.Suburb.toUpperCase();
+    const subFreq = meta.suburb_freq[subKey] || 0;
+
+    // Derive lat/lon from suburb stats (mean of listings in that suburb).
+    const subStats = cachedSuburbStats[subKey];
+    const lat = (subStats && subStats.lat != null) ? subStats.lat : numericMeds.Latitude;
+    const lon = (subStats && subStats.lon != null) ? subStats.lon : numericMeds.Longitude;
+
+    let pt = input.Property_Type;
+    if (meta.rare_property_types && meta.rare_property_types.includes(pt)) pt = 'Other';
+
+    const landTypes = new Set(meta.land_property_types || []);
+    const newBuildTypes = new Set(meta.new_build_types || []);
+    const typeIsLand = landTypes.has(input.Property_Type);
+    const noRooms = (input.Beds === 0 || input.Beds == null) && (input.Baths === 0 || input.Baths == null);
+    const hasLand = (input.LandSize_sqm || 0) > 0;
+    const isLand = (typeIsLand || (noRooms && hasLand)) ? 1 : 0;
+
+    const env = meta.metro_envelope;
+    const outOfMetro = (lat >= env.lat[0] && lat <= env.lat[1]
+                        && lon >= env.lon[0] && lon <= env.lon[1]) ? 0 : 1;
+
+    const isNewBuild = newBuildTypes.has(input.Property_Type) ? 1 : 0;
+
+    const now = new Date();
+    const year  = now.getFullYear();
+    const month = now.getMonth() + 1;
+
+    const vals = {};
+
+    for (const c of meta.numeric_cols) {
+        let v;
+        if (c === 'Beds')                       v = input.Beds;
+        else if (c === 'Baths')                 v = input.Baths;
+        else if (c === 'Car_Spaces')            v = input.Car_Spaces;
+        else if (c === 'LandSize_sqm')          v = input.LandSize_sqm;
+        else if (c === 'Distance_to_CBD_km')    v = input.Distance_to_CBD_km;
+        else if (c === 'Latitude')              v = lat;
+        else if (c === 'Longitude')             v = lon;
+        else                                    v = null;
+        if (v == null || isNaN(v)) v = numericMeds[c];
+        vals[c] = v;
+    }
+
+    vals.Year = year;
+    vals.Month = month;
+    vals.is_land = isLand;
+    vals.out_of_metro = outOfMetro;
+    vals.is_new_build = isNewBuild;
+    vals.Suburb_freq = subFreq;
+
+    for (const t of meta.property_types) {
+        vals[`PT_${t}`] = (pt === t) ? 1 : 0;
+    }
+
+    const x = new Float32Array(meta.feature_order.length);
+    meta.feature_order.forEach((name, i) => {
+        const v = vals[name];
+        x[i] = (v == null || isNaN(v)) ? 0 : v;
+    });
+    return x;
+}
+
+async function runOnnxPredict(featVec) {
+    const meta = preprocessorMeta;
+    const tensor = new ort.Tensor('float32', featVec, [1, meta.feature_order.length]);
+
+    const [outPoint, outQ10, outQ90] = await Promise.all([
+        onnxSessions.point.run({ input: tensor }),
+        onnxSessions.q10.run({ input: tensor }),
+        onnxSessions.q90.run({ input: tensor }),
+    ]);
+
+    const getVal = (out) => {
+        const key = Object.keys(out)[0];
+        return out[key].data[0];
+    };
+
+    const logP = getVal(outPoint);
+    const log10 = getVal(outQ10);
+    const log90 = getVal(outQ90);
+
+    const point = Math.expm1(logP);
+    const lo = Math.min(Math.expm1(log10), point);
+    const up = Math.max(Math.expm1(log90), point);
+    return { point, lower: lo, upper: up };
+}
+
+/* ════════════════════════════════════════════════════════════
+   PREDICT - on click
+   ════════════════════════════════════════════════════════════ */
+async function runPredict() {
+    await loadOnnxModels();
+    if (!onnxSessions.loaded) return;
+
+    const input = {
+        Suburb:              document.getElementById('pf_suburb').value,
+        Property_Type:       document.getElementById('pf_type').value,
+        Postcode:            parseInt(document.getElementById('pf_postcode').value),
+        Beds:                parseFloat(document.getElementById('pf_beds').value),
+        Baths:               parseFloat(document.getElementById('pf_baths').value),
+        Car_Spaces:          parseInt(document.getElementById('pf_cars').value),
+        LandSize_sqm:        parseFloat(document.getElementById('pf_land').value),
+        Distance_to_CBD_km:  parseFloat(document.getElementById('pf_cbd').value),
+    };
+
+    const featVec = buildFeatureVector(input);
+    let result;
+    try {
+        result = await runOnnxPredict(featVec);
+    } catch (err) {
+        document.getElementById('resultState').innerHTML = '<b style="color:#e11d48">Inference failed.</b><br>' + err.message;
+        console.error(err);
+        return;
+    }
+
+    document.getElementById('resultState').style.display = 'none';
+    document.getElementById('resultContent').classList.add('show');
+
+    document.getElementById('rPoint').textContent = fmtMoneyFull(result.point);
+    document.getElementById('rPointSub').textContent = 'AUD · ' + new Date().toISOString().slice(0,10);
+    document.getElementById('rLower').textContent = fmtMoneyFull(result.lower);
+    document.getElementById('rUpper').textContent = fmtMoneyFull(result.upper);
+
+    const subKey = input.Suburb.toUpperCase();
+    const compEl = document.getElementById('rCompare');
+    if (cachedSuburbStats[subKey] && cachedSuburbStats[subKey].median > 0) {
+        const med = cachedSuburbStats[subKey].median;
+        const diff = (result.point - med) / med * 100;
+        const arrow = diff > 0 ? '↑' : '↓';
+        compEl.innerHTML = `Median predicted price across <b>${subKey}</b> is <b>${fmtMoneyFull(med)}</b>. Your estimate is <b>${arrow} ${Math.abs(diff).toFixed(1)}%</b> of the suburb median.`;
+        compEl.style.display = 'block';
+    } else {
+        compEl.style.display = 'none';
+    }
+
+    const warnings = [];
+    const newBuild = new Set(preprocessorMeta.new_build_types || []);
+    if (!preprocessorMeta.suburb_freq[subKey]) {
+        warnings.push(`Suburb "${input.Suburb}" has no historical sales data - prediction may be less reliable.`);
+    }
+    if (result.point > 2_500_000) {
+        warnings.push('Prediction in luxury range (>$2.5M) - higher uncertainty (~23% MAPE).');
+    } else if (result.point < 500_000) {
+        warnings.push('Prediction in budget range (<$500k) - higher uncertainty (~17% MAPE).');
+    }
+    if (newBuild.has(input.Property_Type)) {
+        warnings.push('New-build property type - training data is sparse for this category.');
+    }
+    document.getElementById('rWarnings').innerHTML = warnings.map(w => `<div class="result-warning">${w}</div>`).join('');
+
+    const width = (result.upper - result.lower) / result.point * 100;
+    document.getElementById('rFooter').textContent = `Interval width: ${width.toFixed(1)}% of point · 80% prediction interval (10th-90th percentile).`;
+}
 </script>
+
 </body>
-</html> 
+</html>
