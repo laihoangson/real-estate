@@ -26,8 +26,7 @@ import folium
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "production"))
 
-if "config" in sys.modules:
-    del sys.modules["config"]
+sys.modules.pop("config", None)
 import config as prod_cfg
 from train_pipeline import add_engineered_features, transform
 
@@ -514,7 +513,7 @@ with tab_map:
         # ── Property Points map (no cluster, individual markers) ─────────
         st.markdown('<div class="panel-title" style="margin-bottom:10px;">Property Map</div>',
                     unsafe_allow_html=True)
-        map_df = df_f
+        map_df = df_f if len(df_f) <= 5000 else df_f.sample(5000, random_state=0)
 
         center_lat = float(map_df["Latitude"].median())
         center_lon = float(map_df["Longitude"].median())
