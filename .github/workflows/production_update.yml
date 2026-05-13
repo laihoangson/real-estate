@@ -75,8 +75,8 @@ jobs:
       - name: Commit and push updated outputs
         if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name  "laihoangson"
+          git config user.email "lson21757@gmail.com"
           git add production/output/cleaned_data.parquet \
                   production/output/eda_decisions.json \
                   production/output/predictions_for_sale.parquet \
