@@ -20,6 +20,7 @@ import plotly.express as px
 import streamlit as st
 from streamlit_folium import st_folium
 import folium
+from folium.plugins import MarkerCluster
 
 # Make production code importable.
 ROOT = Path(__file__).resolve().parent
@@ -36,140 +37,11 @@ from train_pipeline import add_engineered_features, transform
 # ============================================================
 
 st.set_page_config(
-    page_title="Melbourne Market Insight",
+    page_title="Melbourne Property Price Dashboard",
     page_icon="🏠",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-
-# ============================================================
-# THEME CSS (mirrors the old dashboard.html aesthetic)
-# ============================================================
-
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Serif+Display:ital@0;1&display=swap');
-
-    /* Global background */
-    .stApp { background-color: #f4f6fb; }
-
-    /* Hide default Streamlit header decorations */
-    header[data-testid="stHeader"] { background: transparent; }
-
-    /* Font family across the app */
-    html, body, [class*="css"] {
-        font-family: 'DM Sans', sans-serif !important;
-        color: #1a1d27;
-    }
-
-    /* Title / serif headings */
-    h1, h2, h3 {
-        font-family: 'DM Serif Display', serif !important;
-        font-weight: 400 !important;
-        color: #1a1d27 !important;
-    }
-
-    /* Eyebrow above title */
-    .eyebrow {
-        font-size: 10px; font-weight: 700; letter-spacing: 3px;
-        text-transform: uppercase; color: #2563eb;
-        margin-bottom: 6px; display: flex; align-items: center; gap: 8px;
-    }
-    .eyebrow::before {
-        content: ''; display: block; width: 18px; height: 2px;
-        background: #2563eb; border-radius: 2px;
-    }
-
-    /* Main title */
-    .main-title {
-        font-family: 'DM Serif Display', serif;
-        font-size: 2.5rem; line-height: 1.1; font-weight: 400; color: #1a1d27;
-        margin-bottom: 4px;
-    }
-    .main-title em { font-style: italic; color: #2563eb; }
-
-    /* Live badge */
-    .live-badge {
-        display: inline-flex; align-items: center; gap: 7px;
-        background: rgba(5,150,105,0.08);
-        border: 1px solid rgba(5,150,105,0.18); color: #059669;
-        padding: 6px 13px; border-radius: 100px;
-        font-size: 11.5px; font-weight: 600;
-    }
-    .live-dot {
-        width: 6px; height: 6px; background: #059669;
-        border-radius: 50%; animation: livePulse 2s infinite;
-    }
-    @keyframes livePulse { 0%,100%{opacity:1;} 50%{opacity:0.35;} }
-
-    /* KPI cards */
-    .kpi-grid {
-        display: grid; grid-template-columns: repeat(4, 1fr);
-        gap: 14px; margin: 22px 0 22px 0;
-    }
-    .kpi-card {
-        background: #ffffff; border: 1px solid rgba(0,0,0,0.07);
-        border-radius: 14px; padding: 22px 22px 18px;
-        position: relative; overflow: hidden;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-        transition: border-color .2s, box-shadow .2s, transform .2s;
-    }
-    .kpi-card:hover {
-        border-color: rgba(0,0,0,0.14);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        transform: translateY(-2px);
-    }
-    .kpi-card::after {
-        content: ''; position: absolute; bottom: 0; left: 0; right: 0;
-        height: 3px; opacity: 0.7;
-    }
-    .kpi-card.accent::after  { background: #2563eb; }
-    .kpi-card.emerald::after { background: #059669; }
-    .kpi-card.amber::after   { background: #d97706; }
-    .kpi-card.violet::after  { background: #7c3aed; }
-
-    .kpi-label {
-        font-size: 10.5px; font-weight: 700; letter-spacing: 2px;
-        text-transform: uppercase; color: #7c8499; margin-bottom: 10px;
-    }
-    .kpi-value {
-        font-family: 'DM Serif Display', serif;
-        font-size: 2.1rem; line-height: 1; font-weight: 400;
-    }
-    .kpi-value.accent  { color: #2563eb; }
-    .kpi-value.emerald { color: #059669; }
-    .kpi-value.amber   { color: #d97706; }
-    .kpi-value.violet  { color: #7c3aed; }
-    .kpi-sub {
-        font-size: 11.5px; color: #7c8499; margin-top: 7px;
-    }
-
-    /* Tabs styling */
-    button[data-baseweb="tab"] {
-        font-family: 'DM Sans', sans-serif !important;
-        font-weight: 600 !important; font-size: 13.5px !important;
-    }
-
-    /* Section subheaders inside tabs */
-    .stApp .stMarkdown h3 {
-        font-family: 'DM Sans', sans-serif !important;
-        font-size: 10px !important; font-weight: 700 !important;
-        letter-spacing: 2px !important; text-transform: uppercase !important;
-        color: #7c8499 !important;
-    }
-
-    /* Sidebar background */
-    section[data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid rgba(0,0,0,0.06); }
-
-    /* Caption styling */
-    .stCaption, .caption-muted { color: #7c8499 !important; font-size: 11.5px !important; }
-
-    @media (max-width: 768px) {
-        .kpi-grid { grid-template-columns: 1fr 1fr; }
-    }
-</style>
-""", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -234,26 +106,13 @@ geojson     = load_geojson()
 
 
 # ============================================================
-# RESOLVE LATEST UPDATE DATE
-# ============================================================
-
-# Use the most recent Last_Updated as the live update timestamp.
-if "Last_Updated" in df.columns:
-    last_updated_series = pd.to_datetime(df["Last_Updated"], errors="coerce")
-    last_updated_dt = last_updated_series.max()
-    if pd.isna(last_updated_dt):
-        last_updated_str = "—"
-    else:
-        last_updated_str = last_updated_dt.strftime("%d %b %Y")
-else:
-    last_updated_str = "—"
-
-
-# ============================================================
 # SIDEBAR FILTERS
 # ============================================================
 
 st.sidebar.title("Filters")
+
+snapshot = decisions.get("data_snapshot_date", "unknown")
+st.sidebar.markdown(f"**Data snapshot**: {snapshot}")
 st.sidebar.markdown(f"**Total listings**: {len(df):,}")
 st.sidebar.markdown("---")
 
@@ -297,71 +156,37 @@ def apply_filters(df):
 
 df_f = apply_filters(df)
 
+
 # ============================================================
 # HEADER
 # ============================================================
 
-header_col1, header_col2 = st.columns([3, 1])
-
-with header_col1:
-    st.markdown('<div class="eyebrow">Real Estate Intelligence</div>', unsafe_allow_html=True)
-    st.markdown(
-        '<div class="main-title">Melbourne <em>Market</em> Insight</div>',
-        unsafe_allow_html=True,
-    )
-
-with header_col2:
-    st.markdown(
-        f'<div style="text-align:right; padding-top: 18px;">'
-        f'<span class="live-badge"><span class="live-dot"></span>'
-        f'Updated on {last_updated_str}</span></div>',
-        unsafe_allow_html=True,
-    )
+st.title("🏠 Melbourne Property Price Dashboard")
+st.markdown(
+    f"Predicted prices for **{len(df):,}** For Sale listings as of "
+    f"**{snapshot}**. Filters in the sidebar update all views below."
+)
 
 
 # ============================================================
-# KPI CARDS (custom HTML, mirrors dashboard.html aesthetic)
+# TOP METRICS
 # ============================================================
 
-def fmt_money(v):
-    if v is None or pd.isna(v):
-        return "—"
-    return f"${v:,.0f}"
+c1, c2, c3, c4 = st.columns(4)
+c1.metric("Filtered listings", f"{len(df_f):,}", f"of {len(df):,}")
 
+if len(df_f) > 0:
+    c2.metric("Median predicted", f"${df_f['Predicted_Price'].median():,.0f}")
+    gd = (df_f["Deal_Signal"] == "Good Deal").sum()
+    c3.metric("Good Deals", f"{gd:,}", f"{gd/len(df_f)*100:.1f}%")
+    op = (df_f["Deal_Signal"] == "Overpriced").sum()
+    c4.metric("Overpriced", f"{op:,}", f"{op/len(df_f)*100:.1f}%")
+else:
+    c2.metric("Median predicted", "—")
+    c3.metric("Good Deals", "—")
+    c4.metric("Overpriced", "—")
 
-total_listings   = len(df_f)
-median_predicted = df_f["Predicted_Price"].median() if total_listings else None
-n_good_deals     = (df_f["Deal_Signal"] == "Good Deal").sum() if total_listings else 0
-n_overpriced     = (df_f["Deal_Signal"] == "Overpriced").sum() if total_listings else 0
-
-pct_good = f"{n_good_deals / total_listings * 100:.1f}%" if total_listings else "—"
-pct_over = f"{n_overpriced / total_listings * 100:.1f}%" if total_listings else "—"
-
-kpi_html = f"""
-<div class="kpi-grid">
-    <div class="kpi-card accent">
-        <div class="kpi-label">Filtered Listings</div>
-        <div class="kpi-value accent">{total_listings:,}</div>
-        <div class="kpi-sub">of {len(df):,} total</div>
-    </div>
-    <div class="kpi-card emerald">
-        <div class="kpi-label">Median Predicted</div>
-        <div class="kpi-value emerald">{fmt_money(median_predicted)}</div>
-        <div class="kpi-sub">50th percentile</div>
-    </div>
-    <div class="kpi-card amber">
-        <div class="kpi-label">Good Deals</div>
-        <div class="kpi-value amber">{n_good_deals:,}</div>
-        <div class="kpi-sub">{pct_good} of filtered</div>
-    </div>
-    <div class="kpi-card violet">
-        <div class="kpi-label">Overpriced</div>
-        <div class="kpi-value violet">{n_overpriced:,}</div>
-        <div class="kpi-sub">{pct_over} of filtered</div>
-    </div>
-</div>
-"""
-st.markdown(kpi_html, unsafe_allow_html=True)
+st.markdown("---")
 
 
 # ============================================================
@@ -372,105 +197,82 @@ tab_map, tab_overview, tab_dealers, tab_predict = st.tabs(
     ["🗺️ Map", "📊 Overview", "🏆 Top Dealers", "🔮 Predict a property"]
 )
 
-
 # ============================================================
-# TAB: MAP (Property points top, Suburb choropleth bottom)
+# TAB: MAP (Property Points trên, Suburb Choropleth dưới)
 # ============================================================
 
 with tab_map:
     if len(df_f) == 0:
         st.warning("No listings to display on the map.")
     else:
-        # ------------------------------------------------------
-        # MAP 1: Property Points (individual markers, no cluster)
-        # ------------------------------------------------------
-        st.markdown("### Property Map")
+        # ----------------------------------------------------
+        # MAP 1: Property Points
+        # ----------------------------------------------------
+        st.subheader("Property Map")
         st.caption(
-            f"Showing {min(len(df_f), 3000):,} individual listings "
-            "(sampled if filter result exceeds 3,000 for browser performance). "
-            "Each dot is a property, color-coded by deal signal."
+            f"Showing {min(len(df_f), 2000):,} individual listings "
+            "(sampled if filter result exceeds 2,000 for performance). "
+            "Color = deal signal. Click a marker for details."
         )
 
-        map_df = df_f if len(df_f) <= 3000 else df_f.sample(3000, random_state=0)
+        map_df = df_f if len(df_f) <= 2000 else df_f.sample(2000, random_state=0)
 
         center_lat = float(map_df["Latitude"].median())
         center_lon = float(map_df["Longitude"].median())
 
-        m1 = folium.Map(
-            location=[center_lat, center_lon], zoom_start=10,
-            tiles="CartoDB positron",
-            prefer_canvas=True,                        # fast rendering for many dots
-        )
+        m1 = folium.Map(location=[center_lat, center_lon], zoom_start=10,
+                        tiles="CartoDB positron")
 
+        cluster = MarkerCluster().add_to(m1)
         signal_colors = {
-            "Good Deal":       "#059669",
-            "Fair":            "#2563eb",
-            "Overpriced":      "#e11d48",
-            "No Asking Price": "#94a3b8",
+            "Good Deal":       "green",
+            "Fair":            "blue",
+            "Overpriced":      "red",
+            "No Asking Price": "gray",
         }
 
         for _, r in map_df.iterrows():
-            color = signal_colors.get(r["Deal_Signal"], "#2563eb")
+            color = signal_colors.get(r["Deal_Signal"], "blue")
             asking = ("—" if pd.isna(r["Numeric_Price"])
                       else f"${r['Numeric_Price']:,.0f}")
             url_html = (
                 f'<br><a href="{r["URL"]}" target="_blank" '
-                f'style="color:#2563eb;font-weight:600;text-decoration:none;">View Listing →</a>'
+                f'style="color:#2563eb;font-weight:600;">View Listing →</a>'
                 if "URL" in r and pd.notna(r["URL"]) else ""
             )
             popup = (
-                f"<div style='font-family: DM Sans, sans-serif; min-width: 220px;'>"
-                f"<b style='color:#1a1d27;'>{r['Suburb']}</b><br>"
-                f"<span style='color:#7c8499;font-size:11px;'>{r['Property_Type']}</span><br><br>"
-                f"<span style='color:#4a5168;'>"
+                f"<b>{r['Suburb']}</b><br>"
+                f"{r['Property_Type']}<br>"
                 f"{int(r['Beds']) if not pd.isna(r['Beds']) else '—'}-bed, "
-                f"{int(r['Baths']) if not pd.isna(r['Baths']) else '—'}-bath</span><br>"
+                f"{int(r['Baths']) if not pd.isna(r['Baths']) else '—'}-bath<br>"
                 f"Asking: {asking}<br>"
-                f"Predicted: <b style='color:{color};'>${r['Predicted_Price']:,.0f}</b><br>"
-                f"<span style='color:#7c8499;font-size:11px;'>"
+                f"Predicted: <b>${r['Predicted_Price']:,.0f}</b><br>"
                 f"Range: ${r['Predicted_Price_Lower']:,.0f} – "
-                f"${r['Predicted_Price_Upper']:,.0f}</span><br>"
-                f"<span style='display:inline-block; margin-top:6px; padding:2px 8px; "
-                f"background:{color}22; color:{color}; border-radius:4px; "
-                f"font-size:10px; font-weight:600; text-transform:uppercase;'>"
-                f"{r['Deal_Signal']}</span>"
+                f"${r['Predicted_Price_Upper']:,.0f}<br>"
+                f"<i>{r['Deal_Signal']}</i>"
                 f"{url_html}"
-                f"</div>"
             )
             folium.CircleMarker(
                 location=[r["Latitude"], r["Longitude"]],
-                radius=5,
-                color="rgba(255,255,255,0.6)",
-                weight=1.2,
-                fillColor=color,
-                fillOpacity=0.85,
+                radius=5, color=color, fill=True, fill_opacity=0.7,
                 popup=folium.Popup(popup, max_width=280),
-            ).add_to(m1)
+            ).add_to(cluster)
 
-        # Legend overlay.
+        # Legend.
         legend_html = """
-        <div style="position: absolute; bottom: 24px; left: 24px; z-index: 1000;
+        <div style="position: fixed; bottom: 30px; left: 30px; z-index: 1000;
                     background: rgba(255,255,255,0.95); padding: 12px 16px;
-                    border-radius: 11px; border: 1px solid rgba(0,0,0,0.08);
-                    box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-                    font-family: 'DM Sans', sans-serif; font-size: 11.5px;
-                    color: #4a5168;">
-            <div style="font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-                        font-size: 9.5px; color: #7c8499; margin-bottom: 9px;">
+                    border-radius: 10px; border: 1px solid rgba(0,0,0,0.08);
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.1); font-family: sans-serif;
+                    font-size: 12px;">
+            <div style="font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+                        font-size: 10px; color: #7c8499; margin-bottom: 8px;">
                 Deal Signal
             </div>
-            <div style="display:flex; align-items:center; gap:9px; margin-bottom:6px;">
-                <span style="width:10px;height:10px;background:#059669;border-radius:3px;"></span>Good Deal
-            </div>
-            <div style="display:flex; align-items:center; gap:9px; margin-bottom:6px;">
-                <span style="width:10px;height:10px;background:#2563eb;border-radius:3px;"></span>Fair
-            </div>
-            <div style="display:flex; align-items:center; gap:9px; margin-bottom:6px;">
-                <span style="width:10px;height:10px;background:#e11d48;border-radius:3px;"></span>Overpriced
-            </div>
-            <div style="display:flex; align-items:center; gap:9px;">
-                <span style="width:10px;height:10px;background:#94a3b8;border-radius:3px;"></span>No Asking Price
-            </div>
+            <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:green;border-radius:3px;margin-right:8px;"></span>Good Deal</div>
+            <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:blue;border-radius:3px;margin-right:8px;"></span>Fair</div>
+            <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:red;border-radius:3px;margin-right:8px;"></span>Overpriced</div>
+            <div><span style="display:inline-block;width:10px;height:10px;background:gray;border-radius:3px;margin-right:8px;"></span>No Asking Price</div>
         </div>
         """
         m1.get_root().html.add_child(folium.Element(legend_html))
@@ -480,10 +282,10 @@ with tab_map:
 
         st.markdown("---")
 
-        # ------------------------------------------------------
+        # ----------------------------------------------------
         # MAP 2: Suburb Choropleth (median predicted price)
-        # ------------------------------------------------------
-        st.markdown("### Suburb Map")
+        # ----------------------------------------------------
+        st.subheader("Suburb Map")
         st.caption(
             "Suburb-level median predicted price. Hover a suburb for stats. "
             "Suburbs with fewer than 3 listings under current filters are shown in gray."
@@ -502,12 +304,13 @@ with tab_map:
                               mean_pred      = ("Predicted_Price", "mean"),
                               min_pred       = ("Predicted_Price", "min"),
                               max_pred       = ("Predicted_Price", "max"),
+                              median_asking  = ("Numeric_Price", "median"),
                               latitude       = ("Latitude", "mean"),
                               longitude      = ("Longitude", "mean"))
                          .reset_index())
             sub_stats["Suburb_upper"] = sub_stats["Suburb"].str.upper()
 
-            # Detect GeoJSON suburb property key.
+            # Get GeoJSON suburb key (different files use different property names).
             sample_feat = geojson["features"][0]
             possible_keys = ["Suburb", "SUBURB", "suburb", "Name", "name",
                              "NAME", "vic_loca_2", "LOC_NAME", "loc_name"]
@@ -519,19 +322,20 @@ with tab_map:
             if geo_key is None:
                 geo_key = list(sample_feat["properties"].keys())[0]
 
+            # Build stats lookup keyed by uppercase suburb name.
             stats_lookup = sub_stats.set_index("Suburb_upper").to_dict("index")
 
+            # Center map.
             if len(sub_stats) > 0:
                 center_lat2 = float(sub_stats["latitude"].median())
                 center_lon2 = float(sub_stats["longitude"].median())
             else:
                 center_lat2, center_lon2 = -37.8136, 144.9631
 
-            m2 = folium.Map(
-                location=[center_lat2, center_lon2], zoom_start=10,
-                tiles="CartoDB positron",
-            )
+            m2 = folium.Map(location=[center_lat2, center_lon2], zoom_start=10,
+                            tiles="CartoDB positron")
 
+            # Color buckets for median predicted price.
             def price_color(p):
                 if p is None or pd.isna(p):
                     return "#cbd5e1"
@@ -561,16 +365,16 @@ with tab_map:
             def highlight_function(feature):
                 return {"weight": 3, "color": "#1f3a5f", "fillOpacity": 0.85}
 
-            # Enrich GeoJSON properties so the tooltip can read them.
+            # Enrich GeoJSON with stats fields so tooltip can read them.
             for feat in geojson["features"]:
                 suburb_name = str(feat["properties"].get(geo_key, "")).upper()
                 stats = stats_lookup.get(suburb_name)
                 if stats and stats["n"] >= 3:
-                    feat["properties"]["_n"]      = int(stats["n"])
-                    feat["properties"]["_median"] = f"${stats['median_pred']:,.0f}"
-                    feat["properties"]["_mean"]   = f"${stats['mean_pred']:,.0f}"
-                    feat["properties"]["_min"]    = f"${stats['min_pred']:,.0f}"
-                    feat["properties"]["_max"]    = f"${stats['max_pred']:,.0f}"
+                    feat["properties"]["_n"]       = int(stats["n"])
+                    feat["properties"]["_median"]  = f"${stats['median_pred']:,.0f}"
+                    feat["properties"]["_mean"]    = f"${stats['mean_pred']:,.0f}"
+                    feat["properties"]["_min"]     = f"${stats['min_pred']:,.0f}"
+                    feat["properties"]["_max"]     = f"${stats['max_pred']:,.0f}"
                 else:
                     feat["properties"]["_n"]      = 0
                     feat["properties"]["_median"] = "—"
@@ -588,41 +392,27 @@ with tab_map:
                              "Mean predicted:", "Min:", "Max:"],
                     sticky=True,
                     labels=True,
-                    style="background-color: white; "
-                          "border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; "
-                          "padding: 10px; font-family: 'DM Sans', sans-serif; "
-                          "font-size: 12px; color: #1a1d27; "
-                          "box-shadow: 0 4px 12px rgba(0,0,0,0.08);",
+                    style="background-color: white; border: 1px solid #ddd; "
+                          "border-radius: 6px; padding: 8px; font-size: 12px;",
                 ),
             ).add_to(m2)
 
             # Choropleth legend.
             legend_html2 = """
-            <div style="position: absolute; bottom: 24px; left: 24px; z-index: 1000;
+            <div style="position: fixed; bottom: 30px; left: 30px; z-index: 1000;
                         background: rgba(255,255,255,0.95); padding: 12px 16px;
-                        border-radius: 11px; border: 1px solid rgba(0,0,0,0.08);
-                        box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-                        font-family: 'DM Sans', sans-serif; font-size: 11.5px;
-                        color: #4a5168;">
-                <div style="font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
-                            font-size: 9.5px; color: #7c8499; margin-bottom: 9px;">
+                        border-radius: 10px; border: 1px solid rgba(0,0,0,0.08);
+                        box-shadow: 0 4px 16px rgba(0,0,0,0.1); font-family: sans-serif;
+                        font-size: 12px;">
+                <div style="font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;
+                            font-size: 10px; color: #7c8499; margin-bottom: 8px;">
                     Median Predicted Price
                 </div>
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">
-                    <span style="width:10px;height:10px;background:#059669;border-radius:3px;"></span>Under $750k
-                </div>
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">
-                    <span style="width:10px;height:10px;background:#2563eb;border-radius:3px;"></span>$750k – $1.5M
-                </div>
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">
-                    <span style="width:10px;height:10px;background:#d97706;border-radius:3px;"></span>$1.5M – $3M
-                </div>
-                <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">
-                    <span style="width:10px;height:10px;background:#e11d48;border-radius:3px;"></span>Over $3M
-                </div>
-                <div style="display:flex;align-items:center;gap:9px;">
-                    <span style="width:10px;height:10px;background:#e5e7eb;border-radius:3px;"></span>&lt; 3 listings
-                </div>
+                <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:#059669;border-radius:3px;margin-right:8px;"></span>Under $750k</div>
+                <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:#2563eb;border-radius:3px;margin-right:8px;"></span>$750k – $1.5M</div>
+                <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:#d97706;border-radius:3px;margin-right:8px;"></span>$1.5M – $3M</div>
+                <div style="margin-bottom: 4px;"><span style="display:inline-block;width:10px;height:10px;background:#e11d48;border-radius:3px;margin-right:8px;"></span>Over $3M</div>
+                <div><span style="display:inline-block;width:10px;height:10px;background:#e5e7eb;border-radius:3px;margin-right:8px;"></span>< 3 listings</div>
             </div>
             """
             m2.get_root().html.add_child(folium.Element(legend_html2))
@@ -640,9 +430,9 @@ with tab_overview:
     else:
         col1, col2 = st.columns(2)
 
-        # 1. Deal signal distribution (donut, color-coded by signal).
+        # 1. Deal signal distribution (pie chart, kept color-coded by signal).
         with col1:
-            st.markdown("### Deal Signal Distribution")
+            st.subheader("Deal signal distribution")
             sig_counts = df_f["Deal_Signal"].value_counts().reset_index()
             sig_counts.columns = ["Deal_Signal", "Count"]
             color_map = {
@@ -653,57 +443,37 @@ with tab_overview:
             }
             fig = px.pie(sig_counts, values="Count", names="Deal_Signal",
                          color="Deal_Signal", color_discrete_map=color_map,
-                         hole=0.55)
-            fig.update_traces(textposition="inside", textinfo="percent",
-                              textfont=dict(family="DM Sans", size=12, color="white"))
-            fig.update_layout(
-                height=360, margin=dict(t=10, b=10, l=10, r=10),
-                font=dict(family="DM Sans", size=12, color="#4a5168"),
-                paper_bgcolor="rgba(0,0,0,0)",
-                legend=dict(orientation="h", yanchor="bottom", y=-0.15,
-                            xanchor="center", x=0.5),
-            )
+                         hole=0.4)
+            fig.update_layout(height=350, margin=dict(t=10, b=10, l=10, r=10))
             st.plotly_chart(fig, use_container_width=True)
 
-        # 2. Property type bar (single color, no gradient).
+        # 2. Property_Type distribution (bar, no color gradient).
         with col2:
-            st.markdown("### Property Types")
+            st.subheader("Property types")
             tcounts = (df_f["Property_Type"].value_counts()
                        .head(10).reset_index())
             tcounts.columns = ["Property_Type", "Count"]
             fig = px.bar(tcounts, x="Count", y="Property_Type",
                          orientation="h")
-            fig.update_traces(marker_color="#2563eb", marker_line_width=0)
-            fig.update_layout(
-                height=360, margin=dict(t=10, b=10, l=10, r=10),
-                yaxis={"categoryorder": "total ascending", "title": None},
-                xaxis={"title": None, "gridcolor": "rgba(0,0,0,0.05)"},
-                font=dict(family="DM Sans", size=12, color="#4a5168"),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=False,
-            )
+            fig.update_traces(marker_color="#2563eb")
+            fig.update_layout(height=350, margin=dict(t=10, b=10, l=10, r=10),
+                              yaxis={"categoryorder": "total ascending"},
+                              showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
 
         st.markdown("---")
 
         # 3. Predicted price distribution (histogram).
-        st.markdown("### Predicted Price Distribution")
+        st.subheader("Predicted price distribution")
         fig = px.histogram(df_f, x="Predicted_Price", nbins=60,
                            labels={"Predicted_Price": "Predicted price (AUD)"})
-        fig.update_traces(marker_color="#2563eb", marker_line_width=0)
-        fig.update_layout(
-            height=340, margin=dict(t=10, b=10, l=10, r=10),
-            yaxis={"title": None, "gridcolor": "rgba(0,0,0,0.05)"},
-            xaxis={"title": None, "gridcolor": "rgba(0,0,0,0.05)"},
-            font=dict(family="DM Sans", size=12, color="#4a5168"),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            showlegend=False, bargap=0.02,
-        )
+        fig.update_traces(marker_color="#2563eb")
+        fig.update_layout(height=350, margin=dict(t=10, b=10, l=10, r=10),
+                          showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
-        # 4. Top 15 suburbs by median predicted price (single color).
-        st.markdown("### Top 15 Suburbs By Median Predicted Price")
-        st.caption("Suburbs with at least 5 listings under the current filters.")
+        # 4. Top 15 suburbs by median predicted price (bar, no color gradient).
+        st.subheader("Top 15 suburbs by median predicted price (min 5 listings)")
         sub_stats = (df_f.groupby("Suburb")
                      .agg(n=("Property_ID", "count"),
                           median_pred=("Predicted_Price", "median"))
@@ -715,15 +485,10 @@ with tab_overview:
             fig = px.bar(sub_stats, x="median_pred", y="Suburb",
                          orientation="h",
                          labels={"median_pred": "Median predicted (AUD)"})
-            fig.update_traces(marker_color="#2563eb", marker_line_width=0)
-            fig.update_layout(
-                height=460, margin=dict(t=10, b=10, l=10, r=10),
-                yaxis={"categoryorder": "total ascending", "title": None},
-                xaxis={"title": None, "gridcolor": "rgba(0,0,0,0.05)"},
-                font=dict(family="DM Sans", size=12, color="#4a5168"),
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                showlegend=False,
-            )
+            fig.update_traces(marker_color="#2563eb")
+            fig.update_layout(height=450, margin=dict(t=10, b=10, l=10, r=10),
+                              yaxis={"categoryorder": "total ascending"},
+                              showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("Not enough listings per suburb under the current filters.")
@@ -734,18 +499,20 @@ with tab_overview:
 # ============================================================
 
 with tab_dealers:
-    st.markdown("### Top Deals: Predicted Price Vs Asking Price")
+    st.subheader("Top deals: predicted price vs asking price")
     st.caption(
         "Best opportunities (predicted significantly higher than asking) and "
         "most overpriced listings (predicted significantly lower than asking). "
         "Only listings with an asking price are included."
     )
 
+    # Subset with asking price.
     dealable = df_f[df_f["Numeric_Price"].notna()].copy()
 
     if len(dealable) == 0:
         st.warning("No listings with asking prices match the current filters.")
     else:
+        # Calculate gap metrics.
         dealable["Gap_AUD"] = dealable["Predicted_Price"] - dealable["Numeric_Price"]
         dealable["Gap_Pct"] = (dealable["Gap_AUD"] / dealable["Numeric_Price"]) * 100
 
@@ -755,9 +522,9 @@ with tab_dealers:
 
         st.markdown("---")
 
-        # --------------------------------------------------
-        # TOP 20 GOOD DEALS
-        # --------------------------------------------------
+        # ----------------------------------------------------
+        # TOP 20 GOOD DEALS (predicted > asking)
+        # ----------------------------------------------------
         st.markdown("### 🟢 Top 20 Good Deals")
         st.caption("Predicted price exceeds asking price by the largest margin (% terms).")
 
@@ -796,9 +563,9 @@ with tab_dealers:
 
         st.markdown("---")
 
-        # --------------------------------------------------
-        # TOP 20 OVERPRICED
-        # --------------------------------------------------
+        # ----------------------------------------------------
+        # TOP 20 OVERPRICED (predicted < asking)
+        # ----------------------------------------------------
         st.markdown("### 🔴 Top 20 Overpriced Listings")
         st.caption("Asking price exceeds predicted price by the largest margin (% terms).")
 
@@ -835,6 +602,7 @@ with tab_dealers:
             hide_index=True,
         )
 
+        # Download both tables combined.
         st.markdown("---")
         combined = pd.concat([
             good_display.assign(Category="Good Deal"),
@@ -842,16 +610,16 @@ with tab_dealers:
         ])
         csv = combined.to_csv(index=False).encode("utf-8")
         st.download_button("📥 Download top deals as CSV", data=csv,
-                           file_name="top_deals.csv",
+                           file_name=f"top_deals_{snapshot}.csv",
                            mime="text/csv")
-        
+
+
 # ============================================================
 # TAB: ON-DEMAND PREDICT
 # ============================================================
 
 with tab_predict:
-    st.markdown("### Estimate A Property")
-    st.caption(
+    st.markdown(
         "Enter property details below to get an estimated price based on "
         "the current model. Predictions reflect the latest market level "
         "(current Year and Month are injected automatically)."
@@ -860,7 +628,7 @@ with tab_predict:
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.markdown("#### Location")
+        st.subheader("Location")
         suburb_input = st.selectbox(
             "Suburb",
             options=sorted(suburbs.index.tolist()),
@@ -879,7 +647,7 @@ with tab_predict:
                                           min_value=0.0, max_value=200.0, step=0.5)
 
     with col_right:
-        st.markdown("#### Property Attributes")
+        st.subheader("Property attributes")
         type_input = st.selectbox(
             "Property Type",
             options=sorted(df["Property_Type"].unique().tolist()),
@@ -978,34 +746,16 @@ with tab_predict:
         if type_input in decisions.get("new_build_types", []):
             warnings_list.append("New-build property type - training data is sparse for this category.")
 
-        # Render the result as styled KPI cards mirroring the dashboard aesthetic.
-        result_html = f"""
-        <div class="kpi-grid" style="margin-top: 16px;">
-            <div class="kpi-card emerald">
-                <div class="kpi-label">Lower (10th pct)</div>
-                <div class="kpi-value emerald">${lower:,.0f}</div>
-                <div class="kpi-sub">Conservative estimate</div>
-            </div>
-            <div class="kpi-card accent">
-                <div class="kpi-label">Point Estimate</div>
-                <div class="kpi-value accent">${y_point:,.0f}</div>
-                <div class="kpi-sub">Most likely value</div>
-            </div>
-            <div class="kpi-card amber">
-                <div class="kpi-label">Upper (90th pct)</div>
-                <div class="kpi-value amber">${upper:,.0f}</div>
-                <div class="kpi-sub">Optimistic estimate</div>
-            </div>
-            <div class="kpi-card violet">
-                <div class="kpi-label">Interval Width</div>
-                <div class="kpi-value violet">{width_pct:.1f}%</div>
-                <div class="kpi-sub">of point estimate</div>
-            </div>
-        </div>
-        """
-        st.markdown(result_html, unsafe_allow_html=True)
+        st.markdown("### Estimated price")
+        cc1, cc2, cc3 = st.columns(3)
+        cc1.metric("Lower (10th pct)", f"${lower:,.0f}")
+        cc2.metric("Point estimate",  f"${y_point:,.0f}")
+        cc3.metric("Upper (90th pct)", f"${upper:,.0f}")
 
-        st.caption(f"Inference date: {now.strftime('%d %b %Y')}")
+        st.markdown(
+            f"**Interval width**: {width_pct:.1f}% of point estimate  •  "
+            f"**Inference date**: {now.strftime('%Y-%m-%d')}"
+        )
 
         if warnings_list:
             st.warning("⚠️ " + " ".join(warnings_list))
