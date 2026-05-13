@@ -157,7 +157,7 @@ GitHub Actions workflows handle scheduled runs:
 
 - **geo.yml**: refreshes suburb boundary GeoJSON.
 
-- **production_update.yml**: runs `weekly_update.py`, then commits updated `production/output/` back to the repo.
+- **production_update.yml**: runs `clean.py`, `train_pipeline.py`, and `predict.py`, then commits updated `production/output/` back to the repo.
 
 GitHub Pages re-publishes automatically on every commit, so the dashboard reflects the latest predictions within minutes of the workflow finishing.
 
