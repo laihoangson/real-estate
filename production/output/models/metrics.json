@@ -1,0 +1,33 @@
+{
+  "hyperparameters": {
+    "n_estimators": 1532,
+    "max_depth": 6,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "colsample_bytree": 1.0,
+    "tree_method": "hist",
+    "random_state": 0,
+    "n_jobs": -1,
+    "verbosity": 0
+  },
+  "n_train": 80215,
+  "n_val": 17189,
+  "n_test": 17190,
+  "validation_metrics": {
+    "rmse_log": 0.18087782657666865,
+    "mae_log": 0.12611501673313782,
+    "r2": 0.862577722108946,
+    "rmse_aud": 292569.55483211915,
+    "mae_aud": 138331.83093066423,
+    "mape": 12.918190095986601
+  },
+  "test_metrics": {
+    "rmse_log": 0.18479858033430588,
+    "mae_log": 0.13210704319935,
+    "r2": 0.8359160845256188,
+    "rmse_aud": 221461.8339386966,
+    "mae_aud": 126031.39304510254,
+    "mape": 12.996018565463793
+  },
+  "trained_on": "full Sold (train+val+test)"
+}
