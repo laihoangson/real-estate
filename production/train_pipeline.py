@@ -1,230 +1,209 @@
 """
-Train stage: feature engineering + fit XGBoost models with locked hyperparameters.
+Stage 2: Train XGBoost models on Sold data.
 
-Reads:  production/output/cleaned_data.parquet
-        production/output/eda_decisions.json
-Writes: production/output/models/model.pkl
-        production/output/models/model_q10.pkl
-        production/output/models/model_q90.pkl
-        production/output/models/preprocessor.pkl
-        production/output/models/metrics.json
+- Builds engineered features and preprocessor from training data.
+- Trains point estimator + q10 + q90 quantile models using locked hyperparameters.
+- Reports validation and test metrics, then retrains on full Sold for production.
+- Exports: model.pkl, model_q10.pkl, model_q90.pkl, preprocessor.pkl,
+           metrics.json, model.onnx, model_q10.onnx, model_q90.onnx,
+           preprocessor_meta.json (for browser-side feature transform).
 
 Usage:
-    python production/train.py
+    python production/train_pipeline.py
 """
 
 import json
-import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import joblib
 import numpy as np
 import pandas as pd
-import xgboost as xgb
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from xgboost import XGBRegressor
 
-sys.path.append(str(Path(__file__).resolve().parent))
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+if "config" in sys.modules:
+    del sys.modules["config"]
 import config as cfg
 
 
 # ============================================================
-# LOGGING
+# LOGGER
 # ============================================================
 
-def setup_logger(name="train"):
+def setup_logger(name):
+    import logging
     cfg.ensure_dirs()
-    log_path = cfg.LOG_DIR / f"{name}.log"
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
+    log = logging.getLogger(name)
+    log.setLevel(logging.INFO)
+    log.handlers.clear()
+
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s",
                             datefmt="%Y-%m-%d %H:%M:%S")
-    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-    fh.setFormatter(fmt)
+
     sh = logging.StreamHandler()
     sh.setFormatter(fmt)
-    logger.addHandler(fh); logger.addHandler(sh)
-    return logger
+    log.addHandler(sh)
+
+    fh = logging.FileHandler(cfg.LOG_DIR / "train.log", mode="w", encoding="utf-8")
+    fh.setFormatter(fmt)
+    log.addHandler(fh)
+
+    return log
 
 
 log = setup_logger("train")
 
 
 # ============================================================
-# LOAD
+# FEATURE ENGINEERING
 # ============================================================
 
-def load_data():
-    if not cfg.CLEANED_PARQUET.exists():
-        raise FileNotFoundError(f"Run clean.py first. Missing: {cfg.CLEANED_PARQUET}")
-    df = pd.read_parquet(cfg.CLEANED_PARQUET)
+def add_engineered_features(df, decisions):
+    """
+    Adds:
+      - is_new_build flag based on Property_Type vs new-build category list.
+      - Maps rare Property_Type values to 'Other'.
+    """
+    df = df.copy()
 
-    with open(cfg.EDA_DECISIONS_JSON, "r") as f:
-        decisions = json.load(f)
+    new_build = set(decisions.get("new_build_types", []))
+    df["is_new_build"] = df["Property_Type"].isin(new_build).astype(int)
 
-    log.info(f"Loaded {len(df):,} rows from {cfg.CLEANED_PARQUET}")
-    return df, decisions
+    rare = set(decisions.get("rare_property_types", []))
+    if rare:
+        df["Property_Type"] = df["Property_Type"].where(
+            ~df["Property_Type"].isin(rare), "Other"
+        )
 
-
-# ============================================================
-# FEATURE ENGINEERING (ML SECTION 3)
-# ============================================================
-
-def add_engineered_features(d, decisions):
-    """Add is_new_build flag and group rare Property_Types into 'Other'."""
-    d = d.copy()
-    rare = set(decisions["rare_property_types"])
-    d["Property_Type"] = d["Property_Type"].where(~d["Property_Type"].isin(rare), "Other")
-    new_build = set(decisions["new_build_types"])
-    d["is_new_build"] = d["Property_Type"].isin(new_build).astype(int)
-    return d
+    return df
 
 
 # ============================================================
-# PREPROCESSING (FREQUENCY ENCODING + ONE-HOT + IMPUTATION)
+# PREPROCESSOR
 # ============================================================
 
-class FrequencyEncoder:
-    def fit(self, series):
-        self.freq_ = series.value_counts().to_dict()
-        return self
-
-    def transform(self, series):
-        return series.map(self.freq_).fillna(0).astype(int)
-
-    def fit_transform(self, series):
-        return self.fit(series).transform(series)
+NUMERIC_COLS = [
+    "Beds", "Baths", "Car_Spaces", "LandSize_sqm", "Distance_to_CBD_km",
+    "abs_median_income_weekly", "abs_median_age", "abs_population",
+    "crime_rate_per_100k", "Propertycount", "dist_nearest_train_km",
+    "Latitude", "Longitude",
+]
+TIME_COLS = ["Year", "Month"]
+FLAG_COLS = ["is_land", "out_of_metro", "is_new_build"]
 
 
-def fit_preprocessor(train_df):
-    """Fit frequency encoder, capture Property_Type column list and numeric medians."""
-    suburb_enc = FrequencyEncoder().fit(train_df["Suburb"])
-    ptype_cols = sorted(train_df["Property_Type"].unique().tolist())
-    medians = train_df[cfg.NUMERIC_FEATURES + cfg.TIME_FEATURES].median()
+def build_preprocessor(train_df, decisions):
+    """Fit imputation medians, suburb frequencies, and property type list from training data."""
+    numeric_medians = {c: float(train_df[c].median()) for c in NUMERIC_COLS}
 
-    log.info(f"Fitted preprocessor: "
-             f"{len(suburb_enc.freq_)} suburbs, "
-             f"{len(ptype_cols)} property types")
+    suburb_freq = train_df["Suburb"].value_counts().to_dict()
+    suburb_freq = {k: int(v) for k, v in suburb_freq.items()}
 
-    return {
-        "suburb_freq_map":       suburb_enc.freq_,
-        "property_type_columns": ptype_cols,
-        "numeric_medians":       medians.to_dict(),
-    }
+    property_types = sorted(train_df["Property_Type"].unique().tolist())
 
-
-def transform(d, preproc):
-    """Apply preprocessor to a dataframe, return feature matrix."""
-    d = d.copy()
-
-    # Frequency-encode Suburb (unseen -> 0).
-    d["Suburb_freq"] = d["Suburb"].map(preproc["suburb_freq_map"]).fillna(0).astype(int)
-
-    # One-hot Property_Type using train-time column list.
-    ohe = pd.get_dummies(d["Property_Type"], prefix="ptype")
-    for col in [f"ptype_{c}" for c in preproc["property_type_columns"]]:
-        if col not in ohe.columns:
-            ohe[col] = 0
-    ohe = ohe[[f"ptype_{c}" for c in preproc["property_type_columns"]]]
-
-    # Numeric + time + flag block.
-    num_block = d[cfg.NUMERIC_FEATURES + cfg.TIME_FEATURES + cfg.FLAG_FEATURES + ["Suburb_freq"]].copy()
-
-    # Impute numeric/time medians.
-    medians = pd.Series(preproc["numeric_medians"])
-    num_block[cfg.NUMERIC_FEATURES + cfg.TIME_FEATURES] = (
-        num_block[cfg.NUMERIC_FEATURES + cfg.TIME_FEATURES].fillna(medians)
+    feature_order = (
+        NUMERIC_COLS
+        + TIME_COLS
+        + FLAG_COLS
+        + ["Suburb_freq"]
+        + [f"PT_{t}" for t in property_types]
     )
 
-    X = pd.concat([num_block.reset_index(drop=True),
-                   ohe.reset_index(drop=True)], axis=1).astype(float)
-    return X
+    preprocessor = {
+        "numeric_cols":     NUMERIC_COLS,
+        "time_cols":        TIME_COLS,
+        "flag_cols":        FLAG_COLS,
+        "numeric_medians":  numeric_medians,
+        "suburb_freq":      suburb_freq,
+        "property_types":   property_types,
+        "feature_order":    feature_order,
+    }
+    return preprocessor
 
 
-# ============================================================
-# TIME-BASED 70/15/15 SPLIT
-# ============================================================
+def transform(df, preprocessor):
+    """Apply preprocessor to a dataframe and return the feature matrix as numpy."""
+    out = pd.DataFrame(index=df.index)
 
-def time_split(df_train_pool):
-    df_sorted = df_train_pool.sort_values("Date_parsed").reset_index(drop=True)
-    n = len(df_sorted)
-    train_end = int(n * cfg.SPLIT_RATIOS["train"])
-    val_end   = int(n * (cfg.SPLIT_RATIOS["train"] + cfg.SPLIT_RATIOS["val"]))
+    for c in preprocessor["numeric_cols"]:
+        med = preprocessor["numeric_medians"][c]
+        out[c] = df[c].fillna(med) if c in df.columns else med
 
-    train = df_sorted.iloc[:train_end].copy()
-    val   = df_sorted.iloc[train_end:val_end].copy()
-    test  = df_sorted.iloc[val_end:].copy()
+    for c in preprocessor["time_cols"]:
+        out[c] = df[c] if c in df.columns else 0
 
-    log.info(f"Split: train={len(train):,} | val={len(val):,} | test={len(test):,}")
-    log.info(f"  Train end: {train['Date_parsed'].max().date()}")
-    log.info(f"  Val end:   {val['Date_parsed'].max().date()}")
-    log.info(f"  Test end:  {test['Date_parsed'].max().date()}")
-    return train, val, test
+    for c in preprocessor["flag_cols"]:
+        out[c] = df[c].fillna(0).astype(int) if c in df.columns else 0
+
+    out["Suburb_freq"] = df["Suburb"].map(preprocessor["suburb_freq"]).fillna(0).astype(int)
+
+    for t in preprocessor["property_types"]:
+        out[f"PT_{t}"] = (df["Property_Type"] == t).astype(int)
+
+    out = out[preprocessor["feature_order"]]
+    return out.values.astype(np.float32)
 
 
 # ============================================================
 # METRICS
 # ============================================================
 
-def metrics(y_true_log, y_pred_log):
-    y_true = np.expm1(y_true_log)
-    y_pred = np.expm1(y_pred_log)
-    return {
-        "rmse_log": float(np.sqrt(mean_squared_error(y_true_log, y_pred_log))),
-        "mae_log":  float(mean_absolute_error(y_true_log, y_pred_log)),
-        "r2":       float(r2_score(y_true_log, y_pred_log)),
-        "rmse_aud": float(np.sqrt(mean_squared_error(y_true, y_pred))),
-        "mae_aud":  float(mean_absolute_error(y_true, y_pred)),
-        "mape":     float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100),
+def compute_metrics(y_true, y_pred, label):
+    """Returns dict with RMSE (AUD), MAPE, R²."""
+    from sklearn.metrics import mean_squared_error, r2_score
+
+    rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
+    mape = float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100)
+    r2   = float(r2_score(y_true, y_pred))
+
+    log.info(f"[{label}] RMSE ${rmse:,.0f}  MAPE {mape:.2f}%  R² {r2:.3f}")
+    return {"rmse_aud": rmse, "mape": mape, "r2": r2}
+
+
+# ============================================================
+# ONNX EXPORT
+# ============================================================
+
+def export_onnx_models(model_point, model_q10, model_q90, n_features, out_dir):
+    """Convert 3 XGBoost regressors to ONNX for browser inference."""
+    from onnxmltools import convert_xgboost
+    from onnxmltools.convert.common.data_types import FloatTensorType
+
+    initial_types = [("input", FloatTensorType([None, n_features]))]
+
+    for name, mdl in [("model", model_point),
+                      ("model_q10", model_q10),
+                      ("model_q90", model_q90)]:
+        onnx = convert_xgboost(mdl, initial_types=initial_types)
+        path = out_dir / f"{name}.onnx"
+        with open(path, "wb") as f:
+            f.write(onnx.SerializeToString())
+        size_mb = path.stat().st_size / (1024 * 1024)
+        log.info(f"Exported ONNX: {path.name}  ({size_mb:.2f} MB)")
+
+
+def export_preprocessor_meta(preprocessor, decisions, out_path):
+    """Save preprocessor + decisions metadata for JS-side feature transform."""
+    meta = {
+        "feature_order":       preprocessor["feature_order"],
+        "numeric_cols":        preprocessor["numeric_cols"],
+        "time_cols":           preprocessor["time_cols"],
+        "flag_cols":           preprocessor["flag_cols"],
+        "numeric_medians":     preprocessor["numeric_medians"],
+        "suburb_freq":         preprocessor["suburb_freq"],
+        "property_types":      preprocessor["property_types"],
+        "new_build_types":     decisions.get("new_build_types", []),
+        "rare_property_types": decisions.get("rare_property_types", []),
+        "land_property_types": decisions.get("land_property_types", []),
+        "metro_envelope":      decisions.get("metro_envelope", {}),
     }
-
-
-# ============================================================
-# TRAIN
-# ============================================================
-
-def train_point_model(X, y):
-    log.info(f"Training point model: {cfg.LOCKED_HYPERPARAMETERS}")
-    model = xgb.XGBRegressor(**cfg.LOCKED_HYPERPARAMETERS).fit(X, y)
-    return model
-
-
-def train_quantile_model(X, y, alpha):
-    params = {**cfg.LOCKED_HYPERPARAMETERS,
-              "objective":      "reg:quantileerror",
-              "quantile_alpha": alpha}
-    log.info(f"Training quantile model alpha={alpha}")
-    return xgb.XGBRegressor(**params).fit(X, y)
-
-
-# ============================================================
-# SAVE
-# ============================================================
-
-def save_artifacts(model_point, model_q10, model_q90, preproc, val_metrics, test_metrics, n_train, n_val, n_test):
-    cfg.ensure_dirs()
-
-    joblib.dump(model_point, cfg.MODEL_POINT_PKL)
-    joblib.dump(model_q10,   cfg.MODEL_Q10_PKL)
-    joblib.dump(model_q90,   cfg.MODEL_Q90_PKL)
-    log.info(f"Saved 3 models -> {cfg.MODEL_DIR}")
-
-    joblib.dump(preproc, cfg.PREPROCESSOR_PKL)
-    log.info(f"Saved preprocessor -> {cfg.PREPROCESSOR_PKL}")
-
-    summary = {
-        "hyperparameters":       cfg.LOCKED_HYPERPARAMETERS,
-        "n_train":               n_train,
-        "n_val":                 n_val,
-        "n_test":                n_test,
-        "validation_metrics":    val_metrics,
-        "test_metrics":          test_metrics,
-        "trained_on":            "full Sold (train+val+test)",
-    }
-    with open(cfg.METRICS_JSON, "w") as f:
-        json.dump(summary, f, indent=2, default=str)
-    log.info(f"Saved metrics -> {cfg.METRICS_JSON}")
+    with open(out_path, "w") as f:
+        json.dump(meta, f, indent=2)
+    log.info(f"Wrote preprocessor metadata to {out_path}")
 
 
 # ============================================================
@@ -233,61 +212,142 @@ def save_artifacts(model_point, model_q10, model_q90, preproc, val_metrics, test
 
 def main():
     log.info("=" * 60)
-    log.info("TRAIN STAGE START")
+    log.info("STAGE 2: TRAIN XGBOOST")
     log.info("=" * 60)
 
-    df, decisions = load_data()
+    # ─── 1. Load cleaned data + decisions ───
+    cleaned = pd.read_parquet(cfg.CLEANED_PARQUET)
+    log.info(f"Loaded cleaned data: {len(cleaned):,} rows")
 
-    # Engineer features on the whole frame (Sold + For Sale).
-    df = add_engineered_features(df, decisions)
+    with open(cfg.EDA_DECISIONS_JSON) as f:
+        decisions = json.load(f)
 
-    # Training pool: Sold with valid Numeric_Price.
-    df_sold = df[df["Status"] == "Sold"].copy()
-    train_pool = df_sold.dropna(subset=["Numeric_Price"]).copy()
-    log.info(f"Training pool: {len(train_pool):,} Sold rows with valid price")
+    # ─── 2. Filter Sold + drop rows without price/date ───
+    # NOTE: clean.py saves rows with Numeric_Price NaN (Price Withheld) - we need
+    # to filter those out here because we can't train without a target.
+    # The parsed datetime column was saved by clean.py as 'Date_parsed'.
+    sold = cleaned[cleaned["Status"] == "Sold"].copy()
+    log.info(f"Sold rows from cleaned: {len(sold):,}")
 
-    # Time-based split for evaluation.
-    train_df, val_df, test_df = time_split(train_pool)
+    n0 = len(sold)
+    sold = sold.dropna(subset=["Numeric_Price"])
+    log.info(f"After dropping NaN price: {len(sold):,} ({n0 - len(sold):,} dropped)")
 
-    # Fit preprocessor on train fold only.
-    preproc = fit_preprocessor(train_df)
+    n0 = len(sold)
+    sold = sold.dropna(subset=["Date_parsed"])
+    log.info(f"After dropping NaN Date_parsed: {len(sold):,} ({n0 - len(sold):,} dropped)")
 
-    # Transform all folds.
-    X_train = transform(train_df, preproc)
-    X_val   = transform(val_df,   preproc)
-    X_test  = transform(test_df,  preproc)
-    y_train = np.log1p(train_df["Numeric_Price"].values)
-    y_val   = np.log1p(val_df["Numeric_Price"].values)
-    y_test  = np.log1p(test_df["Numeric_Price"].values)
+    sold = sold.sort_values("Date_parsed").reset_index(drop=True)
+    sold["Year"]  = sold["Date_parsed"].dt.year.astype(int)
+    sold["Month"] = sold["Date_parsed"].dt.month.astype(int)
 
-    # First training pass on train only - measure val and test metrics for reporting.
-    log.info("Pass 1: train on train fold only to measure val/test performance")
-    intermediate = xgb.XGBRegressor(**cfg.LOCKED_HYPERPARAMETERS).fit(X_train, y_train)
-    val_m  = metrics(y_val,  intermediate.predict(X_val))
-    test_m = metrics(y_test, intermediate.predict(X_test))
-    log.info(f"Val:  RMSE={val_m['rmse_aud']:,.0f} | MAPE={val_m['mape']:.2f}% | R2={val_m['r2']:.4f}")
-    log.info(f"Test: RMSE={test_m['rmse_aud']:,.0f} | MAPE={test_m['mape']:.2f}% | R2={test_m['r2']:.4f}")
+    log.info(f"Sold training set: {len(sold):,} rows "
+             f"from {sold['Date_parsed'].min().date()} "
+             f"to {sold['Date_parsed'].max().date()}")
 
-    # Second pass: retrain point + quantile models on FULL Sold for production inference.
-    log.info("Pass 2: retrain on full Sold (train+val+test) for production inference")
-    train_pool_pp = add_engineered_features(train_pool, decisions)   # already done, idempotent
-    preproc_full = fit_preprocessor(train_pool_pp)
-    X_full = transform(train_pool_pp, preproc_full)
-    y_full = np.log1p(train_pool_pp["Numeric_Price"].values)
+    # ─── 3. Time-based split 70/15/15 ───
+    n = len(sold)
+    n_train = int(n * cfg.SPLIT_RATIOS["train"])
+    n_val   = int(n * cfg.SPLIT_RATIOS["val"])
 
-    model_point = train_point_model(X_full, y_full)
-    model_q10   = train_quantile_model(X_full, y_full, alpha=0.1)
-    model_q90   = train_quantile_model(X_full, y_full, alpha=0.9)
+    train = sold.iloc[:n_train].copy()
+    val   = sold.iloc[n_train:n_train + n_val].copy()
+    test  = sold.iloc[n_train + n_val:].copy()
+    log.info(f"Train: {len(train):,} (to {train['Date_parsed'].max().date()})")
+    log.info(f"Val:   {len(val):,}   (to {val['Date_parsed'].max().date()})")
+    log.info(f"Test:  {len(test):,}  (to {test['Date_parsed'].max().date()})")
 
-    save_artifacts(
-        model_point, model_q10, model_q90, preproc_full,
-        val_m, test_m,
-        n_train=len(train_df), n_val=len(val_df), n_test=len(test_df),
-    )
+    # ─── 4. Engineered features ───
+    train = add_engineered_features(train, decisions)
+    val   = add_engineered_features(val,   decisions)
+    test  = add_engineered_features(test,  decisions)
 
-    log.info("=" * 60)
-    log.info("TRAIN STAGE DONE")
-    log.info("=" * 60)
+    # ─── 5. Build preprocessor on training fold ───
+    preprocessor = build_preprocessor(train, decisions)
+    log.info(f"Preprocessor: {len(preprocessor['feature_order'])} features")
+
+    X_train = transform(train, preprocessor)
+    X_val   = transform(val,   preprocessor)
+    X_test  = transform(test,  preprocessor)
+
+    y_train = np.log1p(train["Numeric_Price"].values)
+    y_val   = np.log1p(val["Numeric_Price"].values)
+    y_test  = np.log1p(test["Numeric_Price"].values)
+
+    # ─── 6. Train point estimator on train, evaluate on val ───
+    hp = cfg.LOCKED_HYPERPARAMETERS
+    log.info(f"Hyperparameters: {hp}")
+
+    model_eval = XGBRegressor(**hp)
+    model_eval.fit(X_train, y_train)
+
+    y_val_pred  = np.expm1(model_eval.predict(X_val))
+    val_metrics = compute_metrics(val["Numeric_Price"].values, y_val_pred, "VAL")
+
+    # ─── 7. Train on train+val, evaluate on test ───
+    X_trv = np.concatenate([X_train, X_val], axis=0)
+    y_trv = np.concatenate([y_train, y_val], axis=0)
+
+    model_test = XGBRegressor(**hp)
+    model_test.fit(X_trv, y_trv)
+
+    y_test_pred  = np.expm1(model_test.predict(X_test))
+    test_metrics = compute_metrics(test["Numeric_Price"].values, y_test_pred, "TEST")
+
+    # ─── 8. Retrain on full Sold for production ───
+    log.info("Retraining on full Sold (train+val+test) for production")
+    full_sold = pd.concat([train, val, test], axis=0)
+    preprocessor_full = build_preprocessor(full_sold, decisions)
+
+    X_full = transform(full_sold, preprocessor_full)
+    y_full = np.log1p(full_sold["Numeric_Price"].values)
+
+    model_point = XGBRegressor(**hp)
+    model_point.fit(X_full, y_full)
+
+    # Quantile models (override objective + add quantile_alpha).
+    hp_q = {k: v for k, v in hp.items() if k != "objective"}
+    model_q10 = XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.1, **hp_q)
+    model_q10.fit(X_full, y_full)
+
+    model_q90 = XGBRegressor(objective="reg:quantileerror", quantile_alpha=0.9, **hp_q)
+    model_q90.fit(X_full, y_full)
+    log.info("All 3 production models trained on full Sold")
+
+    # ─── 9. Save artifacts ───
+    cfg.MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+    joblib.dump(model_point,        cfg.MODEL_POINT_PKL)
+    joblib.dump(model_q10,          cfg.MODEL_Q10_PKL)
+    joblib.dump(model_q90,          cfg.MODEL_Q90_PKL)
+    joblib.dump(preprocessor_full,  cfg.PREPROCESSOR_PKL)
+    log.info("Saved 3 pkl models + preprocessor")
+
+    # Metrics JSON
+    metrics = {
+        "trained_on":         "full Sold (train+val+test)",
+        "training_run_date":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "n_train":            len(train),
+        "n_val":               len(val),
+        "n_test":              len(test),
+        "n_full":              len(full_sold),
+        "hyperparameters":    hp,
+        "validation_metrics": val_metrics,
+        "test_metrics":       test_metrics,
+    }
+    with open(cfg.METRICS_JSON, "w") as f:
+        json.dump(metrics, f, indent=2)
+    log.info("Wrote metrics.json")
+
+    # ONNX exports
+    n_features = X_full.shape[1]
+    export_onnx_models(model_point, model_q10, model_q90, n_features, cfg.MODEL_DIR)
+
+    # Preprocessor metadata for browser-side transform
+    export_preprocessor_meta(preprocessor_full, decisions,
+                             cfg.MODEL_DIR / "preprocessor_meta.json")
+
+    log.info("STAGE 2 COMPLETE")
 
 
 if __name__ == "__main__":

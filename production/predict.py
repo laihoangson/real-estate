@@ -1,21 +1,15 @@
 """
-Predict stage: load saved models, predict prices for For Sale listings,
-inject current Year/Month, compute deal signals, save predictions parquet.
+Stage 3: Predict prices for For Sale listings using the trained XGBoost models.
 
-Reads:  production/output/cleaned_data.parquet
-        production/output/eda_decisions.json
-        production/output/models/model.pkl
-        production/output/models/model_q10.pkl
-        production/output/models/model_q90.pkl
-        production/output/models/preprocessor.pkl
-Writes: production/output/predictions_for_sale.parquet
+Loads cleaned data + 3 models (point, q10, q90), applies feature engineering and
+preprocessing, predicts on For Sale rows, classifies deal signals against asking
+prices, and writes both Parquet (for analytics) and CSV (for the static dashboard).
 
 Usage:
     python production/predict.py
 """
 
 import json
-import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -24,94 +18,139 @@ import joblib
 import numpy as np
 import pandas as pd
 
-sys.path.append(str(Path(__file__).resolve().parent))
+# Make sibling modules importable.
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+
+if "config" in sys.modules:
+    del sys.modules["config"]
 import config as cfg
-from train_pipeline import add_engineered_features, transform   # reuse
+from train_pipeline import add_engineered_features, transform
 
 
 # ============================================================
-# LOGGING
+# LOGGER
 # ============================================================
 
-def setup_logger(name="predict"):
+def setup_logger(name):
+    import logging
     cfg.ensure_dirs()
-    log_path = cfg.LOG_DIR / f"{name}.log"
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
-    logger.handlers.clear()
+    log = logging.getLogger(name)
+    log.setLevel(logging.INFO)
+    log.handlers.clear()
+
     fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s",
                             datefmt="%Y-%m-%d %H:%M:%S")
-    fh = logging.FileHandler(log_path, mode="w", encoding="utf-8")
-    fh.setFormatter(fmt)
+
     sh = logging.StreamHandler()
     sh.setFormatter(fmt)
-    logger.addHandler(fh); logger.addHandler(sh)
-    return logger
+    log.addHandler(sh)
+
+    fh = logging.FileHandler(cfg.LOG_DIR / "predict.log", mode="w", encoding="utf-8")
+    fh.setFormatter(fmt)
+    log.addHandler(fh)
+
+    return log
 
 
 log = setup_logger("predict")
 
 
 # ============================================================
-# LOAD
+# DEAL SIGNAL CLASSIFIER
 # ============================================================
 
-def load_inputs():
-    if not cfg.CLEANED_PARQUET.exists():
-        raise FileNotFoundError(f"Run clean.py first. Missing: {cfg.CLEANED_PARQUET}")
-    for p in [cfg.MODEL_POINT_PKL, cfg.MODEL_Q10_PKL,
-              cfg.MODEL_Q90_PKL, cfg.PREPROCESSOR_PKL]:
-        if not p.exists():
-            raise FileNotFoundError(f"Run train.py first. Missing: {p}")
-
-    df = pd.read_parquet(cfg.CLEANED_PARQUET)
-    with open(cfg.EDA_DECISIONS_JSON, "r") as f:
-        decisions = json.load(f)
-
-    model_point = joblib.load(cfg.MODEL_POINT_PKL)
-    model_q10   = joblib.load(cfg.MODEL_Q10_PKL)
-    model_q90   = joblib.load(cfg.MODEL_Q90_PKL)
-    preproc     = joblib.load(cfg.PREPROCESSOR_PKL)
-
-    log.info(f"Loaded data: {len(df):,} rows")
-    log.info(f"Loaded models and preprocessor")
-    return df, decisions, model_point, model_q10, model_q90, preproc
-
-
-# ============================================================
-# INJECT CURRENT YEAR/MONTH
-# ============================================================
-
-def inject_inference_time(df_forsale):
-    """Use current calendar date so predictions reflect today's market level."""
-    now = datetime.now()
-    df_forsale["Year"]  = now.year
-    df_forsale["Month"] = now.month
-    log.info(f"Injected Year={now.year}, Month={now.month} into For Sale")
-    return df_forsale
-
-
-# ============================================================
-# DEAL SIGNAL
-# ============================================================
-
-def classify_deal(row):
-    asking = row["Numeric_Price"]
+def classify_deal(predicted, asking, threshold=0.10):
+    """
+    - 'No Asking Price' if asking is missing.
+    - 'Good Deal'       if asking < predicted * (1 - threshold).
+    - 'Overpriced'      if asking > predicted * (1 + threshold).
+    - 'Fair'            otherwise.
+    """
     if pd.isna(asking):
         return "No Asking Price"
-    pred = row["Predicted_Price"]
-    if pred < cfg.OVERPRICED_THRESHOLD * asking:
-        return "Overpriced"
-    if pred > cfg.GOOD_DEAL_THRESHOLD * asking:
+    lo = predicted * (1 - threshold)
+    hi = predicted * (1 + threshold)
+    if asking < lo:
         return "Good Deal"
+    if asking > hi:
+        return "Overpriced"
     return "Fair"
 
 
 # ============================================================
-# SAVE
+# MAIN
 # ============================================================
 
-def save_predictions(df_forsale):
+def main():
+    log.info("=" * 60)
+    log.info("STAGE 3: PREDICT FOR SALE")
+    log.info("=" * 60)
+
+    # ─── 1. Load cleaned data + decisions ───
+    cleaned = pd.read_parquet(cfg.OUTPUT_DIR / "cleaned_data.parquet")
+    log.info(f"Loaded cleaned data: {len(cleaned):,} rows")
+
+    with open(cfg.OUTPUT_DIR / "eda_decisions.json") as f:
+        decisions = json.load(f)
+
+    # ─── 2. Load models + preprocessor ───
+    model_dir   = cfg.MODEL_DIR
+    model_point = joblib.load(model_dir / "model.pkl")
+    model_q10   = joblib.load(model_dir / "model_q10.pkl")
+    model_q90   = joblib.load(model_dir / "model_q90.pkl")
+    preprocessor = joblib.load(model_dir / "preprocessor.pkl")
+    log.info("Loaded 3 models + preprocessor")
+
+    # ─── 3. Filter For Sale rows ───
+    fs = cleaned[cleaned["Status"] == "For Sale"].copy()
+    log.info(f"For Sale subset: {len(fs):,} rows")
+
+    if len(fs) == 0:
+        log.warning("No For Sale rows to predict on. Exiting.")
+        return
+
+    # ─── 4. Inject current Year / Month (predict at today's market level) ───
+    now = datetime.now()
+    fs["Year"]  = now.year
+    fs["Month"] = now.month
+    log.info(f"Injected Year={now.year}, Month={now.month} for inference")
+
+    # ─── 5. Feature engineering + transform ───
+    fs = add_engineered_features(fs, decisions)
+    X = transform(fs, preprocessor)
+    log.info(f"Feature matrix shape: {X.shape}")
+
+    # ─── 6. Predict ───
+    log.info("Running predictions...")
+    y_point = np.expm1(model_point.predict(X))
+    y_q10   = np.expm1(model_q10.predict(X))
+    y_q90   = np.expm1(model_q90.predict(X))
+
+    # Enforce ordering against floating-point inversions.
+    lower = np.minimum(y_q10, y_point)
+    upper = np.maximum(y_q90, y_point)
+
+    interval_width_pct = np.where(y_point > 0, (upper - lower) / y_point * 100, 0)
+
+    fs["Predicted_Price"]       = np.round(y_point, -3)
+    fs["Predicted_Price_Lower"] = np.round(lower,   -3)
+    fs["Predicted_Price_Upper"] = np.round(upper,   -3)
+    fs["Interval_Width_Pct"]    = np.round(interval_width_pct, 1)
+
+    # ─── 7. Deal signal ───
+    fs["Deal_Signal"] = [
+        classify_deal(p, a)
+        for p, a in zip(fs["Predicted_Price"], fs["Numeric_Price"])
+    ]
+    signal_counts = fs["Deal_Signal"].value_counts()
+    log.info("Deal signal distribution:")
+    for sig, n in signal_counts.items():
+        log.info(f"  {sig:18s} {n:>6,}  ({n/len(fs)*100:.1f}%)")
+
+    log.info(f"Median interval width: {fs['Interval_Width_Pct'].median():.1f}%")
+
+    # ─── 8. Save predictions (Parquet + CSV) ───
     out_cols = [
         "Property_ID", "Status", "Suburb", "Postcode", "Property_Type",
         "Beds", "Baths", "Car_Spaces", "LandSize_sqm",
@@ -122,69 +161,19 @@ def save_predictions(df_forsale):
         "is_land", "out_of_metro", "is_new_build",
         "Last_Updated", "URL",
     ]
-    df_forsale[out_cols].to_parquet(cfg.PREDICTIONS_PARQUET, index=False)
-    log.info(f"Saved predictions -> {cfg.PREDICTIONS_PARQUET}")
-    log.info(f"  Rows: {len(df_forsale):,}")
+    # Defensive: drop cols that might be missing.
+    out_cols = [c for c in out_cols if c in fs.columns]
+    out_df = fs[out_cols]
 
+    out_path = cfg.OUTPUT_DIR / "predictions_for_sale.parquet"
+    out_df.to_parquet(out_path, index=False)
+    log.info(f"Wrote {len(out_df):,} predictions to {out_path}")
 
-# ============================================================
-# MAIN
-# ============================================================
+    csv_path = cfg.OUTPUT_DIR / "predictions_for_sale.csv"
+    out_df.to_csv(csv_path, index=False)
+    log.info(f"Wrote CSV mirror to {csv_path}")
 
-def main():
-    log.info("=" * 60)
-    log.info("PREDICT STAGE START")
-    log.info("=" * 60)
-
-    df, decisions, m_point, m_q10, m_q90, preproc = load_inputs()
-
-    # Engineer features and isolate For Sale.
-    df = add_engineered_features(df, decisions)
-    df_forsale = df[df["Status"] == "For Sale"].copy()
-    log.info(f"For Sale inference set: {len(df_forsale):,} rows")
-
-    # Inject current date.
-    df_forsale = inject_inference_time(df_forsale)
-
-    # Build feature matrix.
-    X_fs = transform(df_forsale, preproc)
-    log.info(f"Feature matrix: {X_fs.shape}")
-
-    # Predict point + lower + upper.
-    y_point = m_point.predict(X_fs)
-    y_q10   = m_q10.predict(X_fs)
-    y_q90   = m_q90.predict(X_fs)
-
-    df_forsale["Predicted_Price"]       = np.expm1(y_point).round(-3)
-    df_forsale["Predicted_Price_Lower"] = np.expm1(y_q10).round(-3)
-    df_forsale["Predicted_Price_Upper"] = np.expm1(y_q90).round(-3)
-
-    # Enforce monotonic ordering (rare floating-point inversions).
-    df_forsale["Predicted_Price_Lower"] = df_forsale[
-        ["Predicted_Price_Lower", "Predicted_Price"]].min(axis=1)
-    df_forsale["Predicted_Price_Upper"] = df_forsale[
-        ["Predicted_Price_Upper", "Predicted_Price"]].max(axis=1)
-
-    df_forsale["Interval_Width_Pct"] = (
-        (df_forsale["Predicted_Price_Upper"] - df_forsale["Predicted_Price_Lower"])
-        / df_forsale["Predicted_Price"] * 100
-    ).round(1)
-
-    df_forsale["Deal_Signal"] = df_forsale.apply(classify_deal, axis=1)
-
-    # Summary log.
-    log.info(f"Predicted price: median ${df_forsale['Predicted_Price'].median():,.0f}, "
-             f"mean ${df_forsale['Predicted_Price'].mean():,.0f}")
-    log.info(f"Median interval width: {df_forsale['Interval_Width_Pct'].median():.1f}%")
-    log.info(f"Deal signal distribution:")
-    for sig, n in df_forsale["Deal_Signal"].value_counts().items():
-        log.info(f"  {sig:20s} {n:6,}  ({n/len(df_forsale)*100:.1f}%)")
-
-    save_predictions(df_forsale)
-
-    log.info("=" * 60)
-    log.info("PREDICT STAGE DONE")
-    log.info("=" * 60)
+    log.info("STAGE 3 COMPLETE")
 
 
 if __name__ == "__main__":
