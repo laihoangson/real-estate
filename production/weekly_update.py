@@ -117,7 +117,7 @@ def main():
     here = Path(__file__).resolve().parent
     stages = [
         ("CLEAN",   here / "clean.py"),
-        ("TRAIN",   here / "train.py"),
+        ("TRAIN",   here / "train_pipeline.py"),
         ("PREDICT", here / "predict.py"),
     ]
 

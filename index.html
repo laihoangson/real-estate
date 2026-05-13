@@ -3,47 +3,209 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="3;url=dashboard.html">
-    <title>Welcome | App Name</title>
+    <title>Melbourne Property Price Project</title>
     <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f8f9fa;
+            line-height: 1.6;
+            color: #262730;
+            background: #f8f9fa;
         }
+
         .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+        }
+
+        header {
             text-align: center;
-            padding: 2rem;
+            padding: 2rem 0 3rem;
+            border-bottom: 1px solid #e0e0e0;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: #1f3a5f;
+        }
+
+        .subtitle {
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+
+        section {
+            margin-bottom: 3rem;
+        }
+
+        h2 {
+            color: #1f3a5f;
+            font-size: 1.75rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #1f77b4;
+        }
+
+        p {
+            margin-bottom: 1rem;
+            color: #444;
+        }
+
+        ul {
+            margin-left: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+            color: #444;
+        }
+
+        .links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .link-card {
+            display: block;
+            padding: 1.5rem;
             background: white;
-            border-radius: 12px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        h1 { color: #333; }
-        p { color: #666; }
-        .btn {
-            display: inline-block;
-            margin-top: 1rem;
-            padding: 10px 20px;
-            background-color: #007bff;
-            color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
             text-decoration: none;
-            border-radius: 6px;
-            font-weight: bold;
+            color: inherit;
+            transition: transform 0.15s, box-shadow 0.15s;
+            border-left: 4px solid #1f77b4;
         }
-        .btn:hover { background-color: #0056b3; }
+
+        .link-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .link-card h3 {
+            color: #1f3a5f;
+            margin-bottom: 0.5rem;
+            font-size: 1.2rem;
+        }
+
+        .link-card p {
+            font-size: 0.95rem;
+            margin-bottom: 0;
+            color: #6c757d;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #e7f3ff;
+            color: #1f77b4;
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .stack {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-top: 1rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 0;
+            color: #6c757d;
+            font-size: 0.9rem;
+            border-top: 1px solid #e0e0e0;
+            margin-top: 3rem;
+        }
+
+        code {
+            background: #f0f2f6;
+            padding: 0.15rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.9em;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+        }
     </style>
 </head>
 <body>
-
     <div class="container">
-        <h1>Welcome Back</h1>
-        <p>Redirecting you to your dashboard in a few seconds...</p>
-        <a href="dashboard.html" class="btn">Go to Dashboard Now</a>
-    </div>
+        <header>
+            <h1>Melbourne Property Price Project</h1>
+            <p class="subtitle">End-to-end pipeline: scraping → enrichment → EDA → ML → live dashboard</p>
+        </header>
 
+        <section>
+            <h2>About</h2>
+            <p>
+                This project predicts prices for active Melbourne property listings using transaction history.
+                It scrapes Domain.com.au weekly, enriches the data with ABS demographics, crime statistics, and
+                proximity-to-transport features, then trains an XGBoost model to predict prices for 38,000+
+                For Sale listings.
+            </p>
+            <p>
+                The data snapshot is refreshed every Sunday at 9:00 AM Melbourne time. Predictions reflect
+                the current market level by injecting today's Year and Month at inference.
+            </p>
+            <div class="stack">
+                <span class="badge">Python</span>
+                <span class="badge">XGBoost</span>
+                <span class="badge">scikit-learn</span>
+                <span class="badge">SHAP</span>
+                <span class="badge">Streamlit</span>
+                <span class="badge">Plotly</span>
+                <span class="badge">Folium</span>
+                <span class="badge">GitHub Actions</span>
+            </div>
+        </section>
+
+        <section>
+            <h2>Pipeline</h2>
+            <ul>
+                <li><strong>Data scraping</strong> (<code>etl/extract_house_price.py</code>): pulls Sold and For Sale listings from Domain.com.au.</li>
+                <li><strong>Enrichment</strong> (<code>etl/enrich_property_data.py</code>): joins ABS demographics, crime rate, and train-station distance per suburb.</li>
+                <li><strong>Cleaning</strong> (<code>production/clean.py</code>): outlier handling, per-type LandSize caps, NaN policies.</li>
+                <li><strong>Training</strong> (<code>production/train_pipeline.py</code>): time-based 70/15/15 split, XGBoost with locked hyperparameters, quantile models for prediction intervals.</li>
+                <li><strong>Prediction</strong> (<code>production/predict.py</code>): For Sale inference with current Year/Month injection, deal-signal classification.</li>
+                <li><strong>Orchestration</strong> (<code>production/weekly_update.py</code>): GitHub Actions runs all stages every Sunday.</li>
+            </ul>
+        </section>
+
+        <section>
+            <h2>Resources</h2>
+            <div class="links">
+                <a class="link-card" href="DASHBOARD_URL_PLACEHOLDER" target="_blank" rel="noopener">
+                    <h3>🏠 Live Dashboard</h3>
+                    <p>Interactive Streamlit app with filters, map, listings table, and on-demand price prediction.</p>
+                </a>
+                <a class="link-card" href="report/eda_report.html">
+                    <h3>📊 EDA Report</h3>
+                    <p>Exploratory analysis: data quality, outliers, time-series price inflation, Sold vs For Sale drift.</p>
+                </a>
+                <a class="link-card" href="report/ml_report.html">
+                    <h3>🤖 ML Report</h3>
+                    <p>Model development: Linear vs Random Forest vs XGBoost, SHAP interpretability, final predictions.</p>
+                </a>
+                <a class="link-card" href="https://github.com/laihoangson/real-estate" target="_blank" rel="noopener">
+                    <h3>💻 Source Code</h3>
+                    <p>GitHub repository with full pipeline, notebooks, and reproducible scripts.</p>
+                </a>
+            </div>
+        </section>
+
+        <footer>
+            Data snapshot: <strong>2 May 2026</strong> · Updated weekly · Built by ThaiLH
+        </footer>
+    </div>
 </body>
 </html>

@@ -1,9 +1,30 @@
-pandas
-beautifulsoup4
+# ML pipeline
+pandas==2.2.3
+numpy==2.1.2
+pyarrow==18.0.0
+scikit-learn==1.5.2
+xgboost==2.1.2
+shap==0.46.0
+joblib==1.4.2
+
+# Dashboard
+streamlit==1.40.0
+plotly==5.24.1
+folium==0.18.0
+streamlit-folium==0.23.1
+
+# ETL (existing scraper deps - keep if your scraper.yml needs them)
+requests==2.32.3
+beautifulsoup4==4.12.3
+lxml==5.3.0
 selenium
-lxml
 aiohttp
 webdriver_manager
 undetected-chromedriver
 cloudscraper
 curl_cffi
+
+# Reports (for notebook execution)
+jupyter==1.1.1
+matplotlib==3.9.2
+seaborn==0.13.2
