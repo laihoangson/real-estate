@@ -1,211 +1,519 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Melbourne Property Price Project</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Melbourne Property Price · Intelligent Forecast</title>
+  
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  
+  <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            line-height: 1.6;
-            color: #262730;
-            background: #f8f9fa;
-        }
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
 
-        .container {
-            max-width: 960px;
-            margin: 0 auto;
-            padding: 3rem 1.5rem;
-        }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-        header {
-            text-align: center;
-            padding: 2rem 0 3rem;
-            border-bottom: 1px solid #e0e0e0;
-            margin-bottom: 3rem;
-        }
+    html, body {
+      overflow-x: hidden !important; /* Fix mobile horizontal scroll */
+      width: 100%;
+    }
 
-        h1 {
-            font-size: 2.5rem;
-            margin-bottom: 0.5rem;
-            color: #1f3a5f;
-        }
+    body {
+      background: #f8fafc;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: #0f172a;
+      line-height: 1.6;
+      position: relative;
+    }
 
-        .subtitle {
-            color: #6c757d;
-            font-size: 1.1rem;
-        }
+    /* Animated Background Orbs */
+    .glow-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(90px);
+      z-index: 0;
+      opacity: 0.4;
+      animation: float 15s infinite ease-in-out alternate;
+      pointer-events: none;
+    }
 
-        section {
-            margin-bottom: 3rem;
-        }
+    @keyframes float {
+      0%, 100% { transform: translateY(0) scale(1); }
+      50% { transform: translateY(-30px) scale(1.1); }
+    }
 
-        h2 {
-            color: #1f3a5f;
-            font-size: 1.75rem;
-            margin-bottom: 1rem;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid #1f77b4;
-        }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2.5rem 2rem;
+      position: relative;
+      z-index: 2;
+    }
 
-        p {
-            margin-bottom: 1rem;
-            color: #444;
-        }
+    header {
+      text-align: center;
+      margin-bottom: 4rem;
+      padding: 3rem 0 1.5rem;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    }
 
-        ul {
-            margin-left: 1.5rem;
-            margin-bottom: 1rem;
-        }
+    .main-title {
+      font-size: clamp(2.2rem, 6vw, 4rem); /* Responsive font size */
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #1e3a8a 0%, #0ea5e9 50%, #10b981 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      background-size: 200% auto;
+      animation: gradientShift 6s ease infinite;
+      margin-bottom: 0.8rem;
+      line-height: 1.2;
+    }
 
-        li {
-            margin-bottom: 0.5rem;
-            color: #444;
-        }
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
 
-        .links {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 1.5rem;
-            margin-top: 2rem;
-        }
+    .subtitle {
+    font-size: 1.15rem;
+    color: #475569;
 
-        .link-card {
-            display: block;
-            padding: 1.5rem;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            text-decoration: none;
-            color: inherit;
-            transition: transform 0.15s, box-shadow 0.15s;
-            border-left: 4px solid #1f77b4;
-        }
+    display: flex;
+    flex-direction: column;   /* thêm */
+    align-items: center;
+    justify-content: center;
 
-        .link-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
+    gap: 0.7rem;
+    font-weight: 500;
+    }
 
-        .link-card h3 {
-            color: #1f3a5f;
-            margin-bottom: 0.5rem;
-            font-size: 1.2rem;
-        }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      border: 1px solid #bae6fd;
+      border-radius: 30px;
+      padding: 0.35rem 1.2rem;
+      font-size: 0.85rem;
+      color: #0369a1;
+      font-weight: 600;
+      gap: 0.4rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
 
-        .link-card p {
-            font-size: 0.95rem;
-            margin-bottom: 0;
-            color: #6c757d;
-        }
+    .pulse-dot {
+      display: inline-block;
+      width: 9px;
+      height: 9px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+      animation: softPulse 2s infinite;
+    }
 
-        .badge {
-            display: inline-block;
-            background: #e7f3ff;
-            color: #1f77b4;
-            padding: 0.25rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            margin-right: 0.5rem;
-            margin-bottom: 0.5rem;
-        }
+    @keyframes softPulse {
+      0% { opacity: 0.8; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.25); box-shadow: 0 0 14px #34d399; }
+      100% { opacity: 0.8; transform: scale(0.9); }
+    }
 
-        .stack {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 0.4rem;
-            margin-top: 1rem;
-        }
+    section {
+      margin-bottom: 5rem;
+    }
 
-        footer {
-            text-align: center;
-            padding: 2rem 0;
-            color: #6c757d;
-            font-size: 0.9rem;
-            border-top: 1px solid #e0e0e0;
-            margin-top: 3rem;
-        }
+    h2 {
+      font-size: clamp(1.8rem, 4vw, 2.2rem);
+      font-weight: 700;
+      margin-bottom: 2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      color: #0f172a;
+      width: fit-content;
+      position: relative;
+    }
 
-        code {
-            background: #f0f2f6;
-            padding: 0.15rem 0.4rem;
-            border-radius: 3px;
-            font-size: 0.9em;
-            font-family: "SF Mono", Monaco, Consolas, monospace;
-        }
-    </style>
+    h2::after {
+      content: '';
+      position: absolute;
+      bottom: -8px;
+      left: 0;
+      width: 60%;
+      height: 3px;
+      background: linear-gradient(90deg, #3b82f6, transparent);
+      border-radius: 4px;
+    }
+
+    h2 i {
+      color: #3b82f6;
+      font-size: 1.8rem;
+      background: #eff6ff;
+      padding: 0.6rem;
+      border-radius: 14px;
+      box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    /* Glassmorphism Highlight Cards */
+    .highlights-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 2rem;
+      margin-top: 2rem;
+    }
+
+    .highlight-card {
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      border-radius: 24px;
+      padding: 2rem 1.8rem;
+      text-decoration: none;
+      color: #1e293b;
+      box-shadow: 0 10px 30px -10px rgba(15, 23, 42, 0.05);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .highlight-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: linear-gradient(to bottom, #3b82f6, #0ea5e9);
+      border-radius: 24px 0 0 24px;
+      opacity: 0.7;
+      transition: all 0.4s ease;
+    }
+
+    .highlight-card:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: 0 20px 40px -15px rgba(59, 130, 246, 0.2);
+      border-color: rgba(59, 130, 246, 0.3);
+      background: rgba(255, 255, 255, 0.95);
+    }
+
+    .highlight-card:hover::before {
+      opacity: 1;
+      width: 6px;
+      background: linear-gradient(to bottom, #2563eb, #0284c7);
+    }
+
+    .card-icon {
+      font-size: 2.2rem;
+      margin-bottom: 1.5rem;
+      color: #3b82f6;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .highlight-card:hover .card-icon {
+      transform: scale(1.15) rotate(5deg);
+      color: #1d4ed8;
+    }
+
+    .highlight-card h3 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 0.8rem;
+      color: #0f172a;
+    }
+
+    .highlight-card p {
+      color: #64748b;
+      font-size: 0.95rem;
+      margin-bottom: 1.5rem;
+      flex: 1;
+      line-height: 1.6;
+    }
+
+    .card-badge {
+      display: inline-block;
+      background: #f8fafc;
+      color: #334155;
+      padding: 0.4rem 1.2rem;
+      border-radius: 30px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border: 1px solid #e2e8f0;
+      align-self: flex-start;
+      transition: all 0.3s;
+    }
+
+    .highlight-card:hover .card-badge {
+      background: #3b82f6;
+      color: white;
+      border-color: #3b82f6;
+      box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Pipeline list */
+    .pipeline-list {
+      list-style: none;
+      margin-top: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+
+    .pipeline-list li {
+      background: rgba(255, 255, 255, 0.6);
+      backdrop-filter: blur(10px);
+      border: 1px solid #f1f5f9;
+      border-radius: 20px;
+      padding: 1.2rem 1.8rem;
+      display: flex;
+      align-items: center;
+      gap: 1.2rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      color: #475569;
+      font-weight: 500;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.02);
+    }
+
+    .pipeline-list li:hover {
+      background: rgba(255, 255, 255, 0.95);
+      border-color: #bfdbfe;
+      transform: translateX(10px);
+      box-shadow: 0 12px 24px -10px rgba(59, 130, 246, 0.15);
+    }
+
+    .pipeline-list li i {
+      font-size: 1.4rem;
+      color: #3b82f6;
+      width: 32px;
+      text-align: center;
+      transition: transform 0.3s;
+    }
+
+    .pipeline-list li:hover i {
+      transform: scale(1.2);
+    }
+
+    .pipeline-list li strong {
+      color: #0f172a;
+      font-weight: 700;
+      margin-right: 0.3rem;
+    }
+
+    code {
+      background: #f1f5f9;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      color: #334155;
+      border: 1px solid #e2e8f0;
+      font-weight: 600;
+    }
+
+    .tech-stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      margin-top: 2rem;
+    }
+
+    .badge {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(5px);
+      border: 1px solid #cbddec;
+      color: #334155;
+      padding: 0.5rem 1.2rem;
+      border-radius: 30px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.3s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+
+    .badge:hover {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+      transform: translateY(-3px);
+      box-shadow: 0 6px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    footer {
+      text-align: center;
+      padding: 3rem 0 1.5rem;
+      margin-top: 2rem;
+      border-top: 1px solid rgba(0, 0, 0, 0.05);
+      color: #64748b;
+      font-size: 0.95rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    footer strong {
+      color: #0f172a;
+      font-weight: 700;
+    }
+
+    /* Mobile Optimizations */
+    @media (max-width: 640px) {
+      .container {
+        padding: 1.5rem 1rem;
+      }
+      .pipeline-list li {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.8rem;
+        padding: 1.2rem;
+      }
+      .pipeline-list li i {
+        text-align: left;
+      }
+      .live-badge {
+        width: 100%;
+        justify-content: center;
+        margin-top: 0.5rem;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Melbourne Property Price Project</h1>
-            <p class="subtitle">End-to-end pipeline: scraping → enrichment → EDA → ML → live dashboard</p>
-        </header>
+  <div class="glow-orb" style="background: rgba(59, 130, 246, 0.15); width: 400px; height: 400px; top: -100px; left: -100px;"></div>
+  <div class="glow-orb" style="background: rgba(16, 185, 129, 0.1); width: 500px; height: 500px; bottom: 20%; right: -150px; animation-delay: -5s;"></div>
+  <div class="glow-orb" style="background: rgba(99, 102, 241, 0.1); width: 300px; height: 300px; top: 40%; left: 10%; animation-delay: -2s;"></div>
 
-        <section>
-            <h2>About</h2>
-            <p>
-                This project predicts prices for active Melbourne property listings using transaction history.
-                It scrapes Domain.com.au weekly, enriches the data with ABS demographics, crime statistics, and
-                proximity-to-transport features, then trains an XGBoost model to predict prices for 38,000+
-                For Sale listings.
-            </p>
-            <p>
-                The data snapshot is refreshed every Sunday at 9:00 AM Melbourne time. Predictions reflect
-                the current market level by injecting today's Year and Month at inference.
-            </p>
-            <div class="stack">
-                <span class="badge">Python</span>
-                <span class="badge">XGBoost</span>
-                <span class="badge">scikit-learn</span>
-                <span class="badge">SHAP</span>
-                <span class="badge">Streamlit</span>
-                <span class="badge">Plotly</span>
-                <span class="badge">Folium</span>
-                <span class="badge">GitHub Actions</span>
-            </div>
-        </section>
+  <div class="container">
+    <header data-aos="fade-down" data-aos-duration="1000">
+      <h1 class="main-title">Melbourne Property Price</h1>
+        <div class="subtitle">
+        <div>
+            <i class="fas fa-robot"></i>
+            End-to-end pipeline
+        </div>
 
-        <section>
-            <h2>Pipeline</h2>
-            <ul>
-                <li><strong>Data scraping</strong> (<code>etl/extract_house_price.py</code>): pulls Sold and For Sale listings from Domain.com.au.</li>
-                <li><strong>Enrichment</strong> (<code>etl/enrich_property_data.py</code>): joins ABS demographics, crime rate, and train-station distance per suburb.</li>
-                <li><strong>Cleaning</strong> (<code>production/clean.py</code>): outlier handling, per-type LandSize caps, NaN policies.</li>
-                <li><strong>Training</strong> (<code>production/train_pipeline.py</code>): time-based 70/15/15 split, XGBoost with locked hyperparameters, quantile models for prediction intervals.</li>
-                <li><strong>Prediction</strong> (<code>production/predict.py</code>): For Sale inference with current Year/Month injection, deal-signal classification.</li>
-                <li><strong>Orchestration</strong> (<code>production/weekly_update.py</code>): GitHub Actions runs all stages every Sunday.</li>
-            </ul>
-        </section>
+        <span class="live-badge">
+            <span class="pulse-dot"></span>
+            Live Predictions
+        </span>
+        </div>
+    </header>
 
-        <section>
-            <h2>Resources</h2>
-            <div class="links">
-                <a class="link-card" href="https://melbourne-property.streamlit.app/" target="_blank" rel="noopener">
-                    <h3>🏠 Live Dashboard</h3>
-                    <p>Interactive Streamlit app with filters, map, listings table, and on-demand price prediction.</p>
-                </a>
-                <a class="link-card" href="report/eda_report.html">
-                    <h3>📊 EDA Report</h3>
-                    <p>Exploratory analysis: data quality, outliers, time-series price inflation, Sold vs For Sale drift.</p>
-                </a>
-                <a class="link-card" href="report/ml_report.html">
-                    <h3>🤖 ML Report</h3>
-                    <p>Model development: Linear vs Random Forest vs XGBoost, SHAP interpretability, final predictions.</p>
-                </a>
-                <a class="link-card" href="https://github.com/laihoangson/real-estate" target="_blank" rel="noopener">
-                    <h3>💻 Source Code</h3>
-                    <p>GitHub repository with full pipeline, notebooks, and reproducible scripts.</p>
-                </a>
-            </div>
-        </section>
+    <section data-aos="fade-up" data-aos-duration="1000">
+      <h2><i class="fas fa-compass"></i> About</h2>
+      <div style="background: rgba(255,255,255,0.6); backdrop-filter: blur(10px); padding: 1.5rem; border-radius: 20px; border: 1px solid rgba(255,255,255,0.9); box-shadow: 0 4px 6px rgba(0,0,0,0.02);">
+        <p style="font-size: 1.05rem; color: #334155; margin-bottom: 1rem;">
+          This project predicts prices for active Melbourne property listings using transaction history.
+          It scrapes <strong>Domain.com.au</strong> weekly, enriches the data with ABS demographics, crime statistics, and
+          proximity-to-transport features, then trains an <strong>XGBoost</strong> model to predict prices for
+          For Sale listings.
+        </p>
+        <p style="color: #475569; font-size: 0.95rem;">
+          <i class="fas fa-sync-alt" style="margin-right: 0.4rem; color: #3b82f6;"></i>
+          Data snapshot refreshed every Sunday at 9:00 AM Melbourne time. Predictions reflect
+          the current market level by injecting today's <code>Year</code> and <code>Month</code> at inference.
+        </p>
+      </div>
+      
+      <div class="tech-stack" data-aos="fade-up" data-aos-delay="200">
+        <span class="badge"><i class="fab fa-python" style="color: #3b82f6;"></i> Python</span>
+        <span class="badge"><i class="fas fa-chart-line" style="color: #10b981;"></i> XGBoost</span>
+        <span class="badge"><i class="fas fa-brain" style="color: #8b5cf6;"></i> scikit-learn</span>
+        <span class="badge"><i class="fas fa-project-diagram" style="color: #f59e0b;"></i> SHAP</span>
+        <span class="badge"><i class="fas fa-water" style="color: #ef4444;"></i> Streamlit</span>
+        <span class="badge"><i class="fas fa-chart-bar" style="color: #6366f1;"></i> Plotly</span>
+        <span class="badge"><i class="fas fa-map-marked-alt" style="color: #14b8a6;"></i> Folium</span>
+        <span class="badge"><i class="fab fa-github" style="color: #0f172a;"></i> GitHub Actions</span>
+      </div>
+    </section>
 
-        <footer>
-            Data snapshot: <strong>2 May 2026</strong> · Updated weekly · Built by ThaiLH
-        </footer>
-    </div>
+    <section>
+      <h2 data-aos="fade-right"><i class="fas fa-star"></i> Highlights</h2>
+      <div class="highlights-grid">
+        <a class="highlight-card" href="https://melbourne-property.streamlit.app/" target="_blank" rel="noopener" data-aos="fade-up" data-aos-delay="100">
+          <div class="card-icon"><i class="fas fa-home"></i></div>
+          <h3>Live Dashboard</h3>
+          <p>Interactive Streamlit app with filters, map, listings table, and on-demand price prediction.</p>
+          <span class="card-badge"><i class="fas fa-external-link-alt"></i> Explore now</span>
+        </a>
+        <a class="highlight-card" href="report/eda_report.html" data-aos="fade-up" data-aos-delay="200">
+          <div class="card-icon"><i class="fas fa-chart-pie"></i></div>
+          <h3>EDA Report</h3>
+          <p>Exploratory analysis: data quality, outliers, time-series price inflation, Sold vs For Sale drift.</p>
+          <span class="card-badge"><i class="fas fa-file-alt"></i> View insights</span>
+        </a>
+        <a class="highlight-card" href="report/ml_report.html" data-aos="fade-up" data-aos-delay="300">
+          <div class="card-icon"><i class="fas fa-robot"></i></div>
+          <h3>ML Report</h3>
+          <p>Model development: Linear vs Random Forest vs XGBoost, SHAP interpretability, final predictions.</p>
+          <span class="card-badge"><i class="fas fa-flask"></i> Read analysis</span>
+        </a>
+        <a class="highlight-card" href="https://github.com/laihoangson/real-estate" target="_blank" rel="noopener" data-aos="fade-up" data-aos-delay="400">
+          <div class="card-icon"><i class="fab fa-github"></i></div>
+          <h3>Source Code</h3>
+          <p>GitHub repository with full pipeline, notebooks, and reproducible scripts.</p>
+          <span class="card-badge"><i class="fas fa-code"></i> Repository</span>
+        </a>
+      </div>
+    </section>
+
+    <section>
+      <h2 data-aos="fade-right"><i class="fas fa-gears"></i> Pipeline</h2>
+      <ul class="pipeline-list">
+        <li data-aos="fade-up" data-aos-delay="100">
+          <i class="fas fa-database"></i>
+          <span><strong>Data scraping</strong> (<code>etl/extract_house_price.py</code>): pulls Sold and For Sale listings from Domain.com.au.</span>
+        </li>
+        <li data-aos="fade-up" data-aos-delay="150">
+          <i class="fas fa-layer-group"></i>
+          <span><strong>Enrichment</strong> (<code>etl/enrich_property_data.py</code>): joins ABS demographics, crime rate, and train-station distance per suburb.</span>
+        </li>
+        <li data-aos="fade-up" data-aos-delay="200">
+          <i class="fas fa-broom"></i>
+          <span><strong>Cleaning</strong> (<code>production/clean.py</code>): outlier handling, per-type LandSize caps, NaN policies.</span>
+        </li>
+        <li data-aos="fade-up" data-aos-delay="250">
+          <i class="fas fa-microchip"></i>
+          <span><strong>Training</strong> (<code>production/train_pipeline.py</code>): time-based 70/15/15 split, XGBoost with locked hyperparameters, quantile models for prediction intervals.</span>
+        </li>
+        <li data-aos="fade-up" data-aos-delay="300">
+          <i class="fas fa-bullseye"></i>
+          <span><strong>Prediction</strong> (<code>production/predict.py</code>): For Sale inference with current Year/Month injection, deal-signal classification.</span>
+        </li>
+        <li data-aos="fade-up" data-aos-delay="350">
+          <i class="fas fa-calendar-check"></i>
+          <span><strong>Orchestration</strong> (<code>production/weekly_update.py</code>): GitHub Actions runs all stages every Sunday.</span>
+        </li>
+      </ul>
+    </section>
+
+    <footer data-aos="fade-in" data-aos-delay="200">
+      <div style="font-size: 0.85rem; opacity: 0.8; margin-top: 0.4rem;">
+        <i class="fas fa-map-pin" style="color: #ef4444;"></i> Melbourne property intelligence · Built by Hoang Son Lai
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+  <script>
+    AOS.init({
+      once: true, // Chạy animation 1 lần khi cuộn tới
+      offset: 50, // Bắt đầu chạy khi đối tượng cách đáy màn hình 50px
+      duration: 800, // Tốc độ chạy (ms)
+      easing: 'ease-out-cubic' // Gia tốc chuyển động
+    });
+  </script>
 </body>
 </html>
