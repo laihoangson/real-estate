@@ -12,6 +12,7 @@ End-to-end pipeline for scraping, enriching, analyzing, and predicting Melbourne
 
 ## Project structure
 
+```
 real-estate/
 ├── data/                              Raw and enriched data
 │   ├── melbourne_price_data.csv               (scraped from Domain)
@@ -57,10 +58,13 @@ real-estate/
 ├── index.html                         Landing page (GitHub Pages root)
 ├── requirements.txt                   Python dependencies
 └── README.md
+```
 
 ---
 
 ## Pipeline architecture
+
+```
 ┌─────────────────────┐
 │ Domain.com.au       │
 └──────────┬──────────┘
@@ -88,6 +92,7 @@ real-estate/
 │ predictions parquet │ ◄── Streamlit Cloud dashboard
 │ + 3 model pkls      │ ◄── GitHub Pages reports
 └─────────────────────┘
+```
 
 ---
 
