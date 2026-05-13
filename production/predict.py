@@ -120,7 +120,7 @@ def save_predictions(df_forsale):
         "Predicted_Price", "Predicted_Price_Lower", "Predicted_Price_Upper",
         "Interval_Width_Pct", "Deal_Signal",
         "is_land", "out_of_metro", "is_new_build",
-        "Last_Updated",
+        "Last_Updated", "URL",
     ]
     df_forsale[out_cols].to_parquet(cfg.PREDICTIONS_PARQUET, index=False)
     log.info(f"Saved predictions -> {cfg.PREDICTIONS_PARQUET}")
