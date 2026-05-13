@@ -1,6 +1,6 @@
 # Melbourne Property Price Project
 
-End-to-end pipeline for scraping, enriching, analyzing, and predicting Melbourne property prices. The project scrapes Domain.com.au weekly, enriches data with ABS demographics and crime statistics, trains an XGBoost model, and serves predictions through a static dashboard that runs inference directly in the browser via ONNX Runtime Web.
+End-to-end pipeline for scraping, enriching, analyzing, and predicting Melbourne property prices. The project scrapes Domain.com.au, enriches data with ABS demographics and crime statistics, trains an XGBoost model, and serves predictions through a static dashboard that runs inference directly in the browser via ONNX Runtime Web.
 
 ---
 
@@ -61,9 +61,9 @@ real-estate/
 │           └── metrics.json
 │
 ├── .github/workflows/
-│   ├── scraper.yml                            Weekly Domain scraping
+│   ├── scraper.yml                            Domain scraping
 │   ├── geo.yml                                Fetch suburb boundaries
-│   └── production_update.yml                  Weekly clean + train + predict
+│   └── production_update.yml                  clean + train + predict
 │
 ├── dashboard.html                     Static dashboard (Leaflet + Chart.js + ONNX Runtime)
 ├── index.html                         Landing page (GitHub Pages root)
@@ -157,7 +157,7 @@ GitHub Actions workflows handle scheduled runs:
 
 - **geo.yml**: refreshes suburb boundary GeoJSON.
 
-- **production_update.yml**: runs `weekly_update.py` every Sunday at 9:00 AM Melbourne time (handles both AEST and AEDT via a time-gate guard), then commits updated `production/output/` back to the repo.
+- **production_update.yml**: runs `weekly_update.py`, then commits updated `production/output/` back to the repo.
 
 GitHub Pages re-publishes automatically on every commit, so the dashboard reflects the latest predictions within minutes of the workflow finishing.
 
