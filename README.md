@@ -74,7 +74,7 @@ real-estate/
 │ melbourne_price_    │ ◄── │ ABS demographics │
 │ data.csv            │     │ Crime data       │
 └──────────┬──────────┘     │ Train stations   │
-           │                 └──────────────────┘
+           │                └──────────────────┘
            │ enrich_property_data.py
            ▼
 ┌─────────────────────┐
