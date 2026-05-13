@@ -382,7 +382,13 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
 
         <div class="chart-grid-2">
             <div class="panel">
-                <div class="panel-head"><span class="panel-title">Predicted Price Distribution</span></div>
+                <div class="panel-head">
+                    <span class="panel-title" id="histTitle">Predicted Price Distribution</span>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn active" id="btnHistPred">Predicted</button>
+                        <button class="toggle-btn" id="btnHistAsk">Asking</button>
+                    </div>
+                </div>
                 <div class="panel-body"><div class="cw380"><canvas id="priceHistChart"></canvas></div></div>
             </div>
             <div class="panel">
@@ -405,7 +411,7 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
         <div class="chart-grid-2">
             <div class="panel">
                 <div class="panel-head">
-                    <span class="panel-title">Top 15 Suburbs by Median Price</span>
+                    <span class="panel-title">Top 15 Suburbs by Median Predicted Price</span>
                     <div class="toggle-btn-group">
                         <button class="toggle-btn active" id="btnTopHigh">Highest</button>
                         <button class="toggle-btn" id="btnTopLow">Lowest</button>
@@ -584,6 +590,7 @@ let activeSignal = 'ALL';  // Single-select now
 let priceMinVal = null, priceMaxVal = null;
 
 let topSubMode = 'highest';
+let histMode = 'predicted';  // 'predicted' | 'asking'
 let scatterXKey = 'Distance_to_CBD_km';
 const SCATTER_X_LABELS = {
     'Distance_to_CBD_km':       'Distance to CBD (km)',
@@ -659,11 +666,11 @@ function updateLegend() {
         }
         div.innerHTML = html;
     } else {
-        let html = '<div class="mlegend-title">Median Predicted</div>';
+        let html = '<div class="mlegend-title">Median Asking</div>';
         for (const b of PRICE_BUCKETS) {
             html += `<div class="mlegend-row"><span class="mlegend-dot" style="background:${b.color}"></span>${b.label}</div>`;
         }
-        html += '<div class="mlegend-row"><span class="mlegend-dot" style="background:#cbd5e1"></span>No data</div>';
+        html += '<div class="mlegend-row"><span class="mlegend-dot" style="background:#cbd5e1"></span>No asking data</div>';
         div.innerHTML = html;
     }
     const existing = document.querySelector('.leaflet-control.mlegend');
@@ -863,8 +870,11 @@ function computeStats(data) {
         if (r.Deal_Signal === 'Overpriced') overN++;
         const s = r.Suburb;
         if (!s) return;
-        if (!cachedSuburbStats[s]) cachedSuburbStats[s] = { prices: [], count: 0, lats: [], lons: [] };
+        if (!cachedSuburbStats[s]) cachedSuburbStats[s] = { prices: [], askings: [], count: 0, lats: [], lons: [] };
         cachedSuburbStats[s].prices.push(r.Predicted_Price);
+        if (r.Numeric_Price != null && !isNaN(r.Numeric_Price)) {
+            cachedSuburbStats[s].askings.push(r.Numeric_Price);
+        }
         cachedSuburbStats[s].count++;
         if (r.Latitude) cachedSuburbStats[s].lats.push(r.Latitude);
         if (r.Longitude) cachedSuburbStats[s].lons.push(r.Longitude);
@@ -877,6 +887,14 @@ function computeStats(data) {
         stats.mean = arr.reduce((a,b)=>a+b,0) / n;
         stats.min = arr[0];
         stats.max = arr[n-1];
+
+        // Median asking (may be null if no priced listings in suburb).
+        const askArr = stats.askings.sort((a,b)=>a-b);
+        const m = askArr.length;
+        stats.medianAsking = m === 0 ? null
+            : m % 2 === 0 ? (askArr[m/2-1]+askArr[m/2])/2 : askArr[Math.floor(m/2)];
+        stats.nAsking = m;
+
         stats.lat = stats.lats.length ? stats.lats.reduce((a,b)=>a+b,0)/stats.lats.length : null;
         stats.lon = stats.lons.length ? stats.lons.reduce((a,b)=>a+b,0)/stats.lons.length : null;
     }
@@ -945,8 +963,12 @@ function renderMap(data) {
             style: feat => {
                 const name = String(feat.properties.Suburb || feat.properties.suburb || '').toUpperCase();
                 const stats = cachedSuburbStats[name];
-                if (stats && stats.median > 0) {
-                    return { fillColor: priceBucketColor(stats.median), color: '#ffffff', weight: 0.7, fillOpacity: 0.72 };
+                // Color by median asking price (falls back to predicted if no asking data).
+                if (stats) {
+                    const colorValue = stats.medianAsking != null ? stats.medianAsking : stats.median;
+                    if (colorValue > 0) {
+                        return { fillColor: priceBucketColor(colorValue), color: '#ffffff', weight: 0.7, fillOpacity: 0.72 };
+                    }
                 }
                 return { fillColor: '#cbd5e1', color: '#ffffff', weight: 0.5, fillOpacity: 0.18 };
             },
@@ -957,10 +979,11 @@ function renderMap(data) {
                     `<div class="choro-tooltip">
                         <div class="choro-title">${name}</div>
                         <div class="choro-stat"><span>Listings</span><b>${stats.count}</b></div>
-                        <div class="choro-stat"><span>Median</span><b>${fmtMoneyFull(stats.median)}</b></div>
-                        <div class="choro-stat"><span>Mean</span><b>${fmtMoneyFull(stats.mean)}</b></div>
-                        <div class="choro-stat"><span>Min</span><b>${fmtMoneyFull(stats.min)}</b></div>
-                        <div class="choro-stat"><span>Max</span><b>${fmtMoneyFull(stats.max)}</b></div>
+                        <div class="choro-stat" style="border-top:1px solid #e2e8f0; padding-top:5px; margin-top:5px;"><span>Median asking</span><b style="color:#0f172a">${stats.medianAsking != null ? fmtMoneyFull(stats.medianAsking) : '—'}</b></div>
+                        <div class="choro-stat"><span>Median predicted</span><b style="color:#2563eb">${fmtMoneyFull(stats.median)}</b></div>
+                        <div class="choro-stat" style="border-top:1px solid #e2e8f0; padding-top:5px; margin-top:5px;"><span>Mean predicted</span><b>${fmtMoneyFull(stats.mean)}</b></div>
+                        <div class="choro-stat"><span>Min predicted</span><b>${fmtMoneyFull(stats.min)}</b></div>
+                        <div class="choro-stat"><span>Max predicted</span><b>${fmtMoneyFull(stats.max)}</b></div>
                     </div>` :
                     `<div class="choro-tooltip"><div class="choro-title">${name}</div><div class="choro-stat">No listings in filter</div></div>`;
                 layer.bindTooltip(tt, { sticky: true, direction: 'top' });
@@ -1013,11 +1036,24 @@ function renderCharts(data) {
 function drawPriceHist(data) {
     destroyChart('priceHist');
     if (!data.length) return;
+
+    // Pick which column based on histMode.
+    const priceKey = histMode === 'asking' ? 'Numeric_Price' : 'Predicted_Price';
+    const validRows = data.filter(r => r[priceKey] != null && !isNaN(r[priceKey]));
+    if (!validRows.length) return;
+
     const BIN = 250000, MAX = 5000000, bins = [];
     for (let lo = 0; lo < MAX; lo += BIN) bins.push({ label: '$' + (lo+BIN)/1000 + 'k', min: lo, max: lo+BIN });
     bins.push({ label: '>$5M', min: MAX, max: Infinity });
-    const counts = bins.map(b => data.filter(r => r.Predicted_Price >= b.min && r.Predicted_Price < b.max).length);
+    const counts = bins.map(b => validRows.filter(r => r[priceKey] >= b.min && r[priceKey] < b.max).length);
     const colors = bins.map(b => priceBucketColor(b.max === Infinity ? 6_000_000 : (b.min+b.max)/2));
+
+    const nValid = validRows.length;
+    const nTotal = data.length;
+    const subtitle = histMode === 'asking'
+        ? `${nValid.toLocaleString()} of ${nTotal.toLocaleString()} listings have asking prices`
+        : '';
+
     const ctx = document.getElementById('priceHistChart').getContext('2d');
     charts.priceHist = new Chart(ctx, {
         type: 'bar',
@@ -1034,7 +1070,28 @@ function drawPriceHist(data) {
                       y: { grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { color: '#7c8499' } } }
         }
     });
+
+    // Update title to reflect mode.
+    const titleEl = document.getElementById('histTitle');
+    if (titleEl) {
+        titleEl.textContent = histMode === 'asking'
+            ? 'Asking Price Distribution'
+            : 'Predicted Price Distribution';
+    }
 }
+
+document.getElementById('btnHistPred').addEventListener('click', () => {
+    histMode = 'predicted';
+    document.getElementById('btnHistPred').classList.add('active');
+    document.getElementById('btnHistAsk').classList.remove('active');
+    drawPriceHist(filteredData);
+});
+document.getElementById('btnHistAsk').addEventListener('click', () => {
+    histMode = 'asking';
+    document.getElementById('btnHistPred').classList.remove('active');
+    document.getElementById('btnHistAsk').classList.add('active');
+    drawPriceHist(filteredData);
+});
 
 function drawSignalDonut(data) {
     destroyChart('signal');
