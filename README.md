@@ -68,31 +68,32 @@ real-estate/
 ┌─────────────────────┐
 │ Domain.com.au       │
 └──────────┬──────────┘
-│ scraper.yml (weekly)
-▼
+           │ scraper.yml (weekly)
+           ▼
 ┌─────────────────────┐     ┌──────────────────┐
 │ melbourne_price_    │ ◄── │ ABS demographics │
 │ data.csv            │     │ Crime data       │
 └──────────┬──────────┘     │ Train stations   │
-│                 └──────────────────┘
-│ enrich_property_data.py
-▼
+           │                 └──────────────────┘
+           │ enrich_property_data.py
+           ▼
 ┌─────────────────────┐
 │ melbourne_price_    │
 │ data_enriched.csv   │
 └──────────┬──────────┘
-│ production_update.yml (Sundays 9 AM Melbourne)
-▼
+           │ production_update.yml (Sundays 9 AM Melbourne)
+           ▼
 ┌─────────────────────────────────────────────┐
 │ clean.py → train_pipeline.py → predict.py   │
 └──────────┬──────────────────────────────────┘
-│
-▼
+           │
+           ▼
 ┌─────────────────────┐
 │ predictions parquet │ ◄── Streamlit Cloud dashboard
 │ + 3 model pkls      │ ◄── GitHub Pages reports
 └─────────────────────┘
 ```
+
 
 ---
 
