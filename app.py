@@ -513,7 +513,7 @@ with tab_map:
         # ── Property Points map (no cluster, individual markers) ─────────
         st.markdown('<div class="panel-title" style="margin-bottom:10px;">Property Map</div>',
                     unsafe_allow_html=True)
-        map_df = df_f if len(df_f) <= 5000 else df_f.sample(5000, random_state=0)
+        map_df = df_f if len(df_f) <= 2000 else df_f.sample(2000, random_state=0)
 
         center_lat = float(map_df["Latitude"].median())
         center_lon = float(map_df["Longitude"].median())
