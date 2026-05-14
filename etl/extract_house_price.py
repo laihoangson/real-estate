@@ -1,21 +1,23 @@
 """
-Domain.com.au scraper — FREE DAILY-BATCH STRATEGY (v2 — fixed hang)
+Domain.com.au scraper — FREE DAILY-BATCH STRATEGY (v3)
 
-Changes from v1:
-- Disabled Camoufox `humanize=True` (caused hang during warm-up)
-- Removed page.mouse.move calls (also caused hang)
-- Default CELLS_PER_RUN = 14 (full coverage every 14 days)
-- ROTATION_STRIDE = 14 to match
-
-Strategy: scrape a SMALL ROTATING SUBSET each day instead of all 196 cells.
-Over 14 days, you cover everything.
+Config:
+- 28 cells per run × 7 days = 196 cells covered weekly
+- 5 pages per query (with 30% random abandon at page 4+)
+- humanize=False, no mouse.move (causes hangs)
+- Multi-step warm-up to build Akamai trust
 
 Schedule:
-  Day 0:  cells 0, 14, 28, 42, ...   (every 14th starting at 0)
-  Day 1:  cells 1, 15, 29, 43, ...
+  Day 0: cells 0, 7, 14, 21, ...   (every 7th cell)
+  Day 1: cells 1, 8, 15, 22, ...
   ...
-  Day 13: cells 13, 27, 41, ...
-  Day 14: back to cells 0, 14, ...   (refresh cycle)
+  Day 6: cells 6, 13, 20, ...
+  Day 7: back to cells 0, 7, 14, ... (weekly refresh)
+
+Manual override (env vars):
+  MANUAL_OFFSET=5         → use group 5
+  MANUAL_OFFSET=random    → random group 0-6
+  CELLS_PER_RUN=5         → limit to 5 cells for testing
 """
 
 import os
@@ -31,7 +33,7 @@ import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-print("STARTING SCRAPER (Free daily-batch strategy v2)")
+print("STARTING SCRAPER (Free daily-batch strategy v3)")
 
 # ==========================================
 # CONFIGURATION
@@ -46,17 +48,18 @@ PROXY_URL = os.getenv('PROXY_URL')   # optional
 
 NAV_TIMEOUT_MS = 45_000
 
-# Daily slice size — 14 cells × 14 days = 196 total
-CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '14'))
-ROTATION_STRIDE = 14
+# Daily slice size — 28 cells × 7 days = 196 total
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '28'))
+ROTATION_STRIDE = 7
 
 # Pacing
 DELAY_BETWEEN_REQUESTS = (10.0, 22.0)
 PAGES_BEFORE_REST = 10
 REST_DURATION = (90.0, 180.0)
 
-# Hard cap pages per query
-MAX_PAGES_PER_QUERY = 3
+# Pages per query — 5 with random abandon at deep pages
+MAX_PAGES_PER_QUERY = 5
+DEEP_PAGE_ABANDON_PROB = 0.3   # 30% chance to stop after page 3
 
 # Cell strike budget
 CELL_MAX_STRIKES = 2
@@ -154,10 +157,10 @@ def save_incremental_data(new_data_list, file_path):
 
 
 # ==========================================
-# BEHAVIORAL SIMULATION — scroll only, no mouse.move (hangs with Camoufox)
+# BEHAVIORAL SIMULATION — scroll only
 # ==========================================
 def simulate_human_behavior(page):
-    """Random scroll to look human. No mouse.move — it hangs."""
+    """Random scroll. No mouse.move (hangs with Camoufox)."""
     try:
         for _ in range(random.randint(1, 3)):
             scroll_distance = random.randint(200, 900)
@@ -310,7 +313,7 @@ def get_next_data(page, url):
 def make_camoufox_kwargs():
     kwargs = {
         'headless': HEADLESS,
-        'humanize': False,          # ⚠️ MUST be False — True causes hangs
+        'humanize': False,          # MUST be False — True causes hangs
         'locale': 'en-AU',
         'os': random.choice(['windows', 'macos']),
     }
@@ -383,15 +386,30 @@ def warm_up(page):
 
 
 # ==========================================
-# CELL SELECTION — daily rotation
+# CELL SELECTION — daily rotation + manual override
 # ==========================================
 def select_cells_for_today(all_cells):
-    """Pick a rotating slice based on day of year."""
-    today = dt.date.today()
-    offset = today.toordinal() % ROTATION_STRIDE
+    """Pick a rotating slice. Supports manual override via MANUAL_OFFSET env var."""
+    manual_offset = os.getenv('MANUAL_OFFSET', '').strip()
+
+    if manual_offset.isdigit():
+        offset = int(manual_offset) % ROTATION_STRIDE
+        print(f"   🎯 Manual override: using offset {offset}")
+    elif manual_offset.lower() == 'random':
+        offset = random.randint(0, ROTATION_STRIDE - 1)
+        print(f"   🎲 Random offset selected: {offset}")
+    else:
+        today = dt.date.today()
+        offset = today.toordinal() % ROTATION_STRIDE
+        print(f"   📅 Auto offset {offset} for {today}")
+
     selected = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
     random.shuffle(selected)
     selected = selected[:CELLS_PER_RUN]
+
+    cell_ids = sorted([idx for idx, _ in selected])
+    print(f"   🗺️  Cells to scrape: {cell_ids}")
+
     return selected
 
 
@@ -428,7 +446,7 @@ def main():
 
     # Pick today's slice
     todays_cells = select_cells_for_today(all_cells)
-    print(f"   📅 Today's slice: {len(todays_cells)} cells out of {len(all_cells)} total")
+    print(f"   📊 Today's slice: {len(todays_cells)} cells out of {len(all_cells)} total")
 
     if PROXY_URL:
         print(f"   🛡️ Proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
@@ -477,6 +495,11 @@ def main():
 
                     for pg in range(1, MAX_PAGES_PER_QUERY + 1):
                         if cell_strikes >= CELL_MAX_STRIKES:
+                            break
+
+                        # Random abandon at deep pages (humans don't always paginate to the end)
+                        if pg >= 4 and random.random() < DEEP_PAGE_ABANDON_PROB:
+                            print(f"   🚪 Stopping at page {pg} (human-like abandon)")
                             break
 
                         # Pacing rest
