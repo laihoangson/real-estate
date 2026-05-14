@@ -1,7 +1,7 @@
 name: Weekly Production Update
 
 on:
-  schedule:
+#  schedule:
     # 9:00 AM Melbourne time every Sunday.
     # Melbourne is UTC+10 (AEST, standard time) or UTC+11 (AEDT, daylight saving).
     # GitHub Actions cron uses UTC, so we run two cron entries to cover both:
@@ -9,8 +9,8 @@ on:
     #   - 23:00 UTC Saturday = 09:00 AEST Sunday (Apr-Oct, standard time)
     # Each script run is idempotent, but we use a guard inside the job to ensure
     # only one of the two triggers actually executes per Sunday.
-    - cron: '0 22 * * 6'
-    - cron: '0 23 * * 6'
+ #   - cron: '0 22 * * 6'
+ #   - cron: '0 23 * * 6'
   workflow_dispatch:    # allow manual trigger from the Actions tab
 
 jobs:
