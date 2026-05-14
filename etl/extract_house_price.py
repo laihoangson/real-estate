@@ -1,25 +1,21 @@
 """
-Domain.com.au scraper — FREE DAILY-BATCH STRATEGY
+Domain.com.au scraper — FREE DAILY-BATCH STRATEGY (v2 — fixed hang)
 
-Strategy: instead of scraping all 196 cells in one big run (which Akamai blocks),
-scrape a SMALL ROTATING SUBSET each day. Over a week, you cover everything.
+Changes from v1:
+- Disabled Camoufox `humanize=True` (caused hang during warm-up)
+- Removed page.mouse.move calls (also caused hang)
+- Default CELLS_PER_RUN = 14 (full coverage every 14 days)
+- ROTATION_STRIDE = 14 to match
 
-Each run:
-- Picks ~25 cells from the grid using a rotating offset (based on day of year)
-- Only fetches page 1-3 per query (humans don't paginate deeper)
-- Strong warm-up: homepage → suburb profile → real search before grid queries
-- Saves progress so partial runs are still useful
-- Designed to look like a casual house-hunter, not a data scraper
-
-You already have 163k records. This script's job is to KEEP THEM FRESH, not
-to re-scrape everything. Set up GitHub Actions to run daily.
+Strategy: scrape a SMALL ROTATING SUBSET each day instead of all 196 cells.
+Over 14 days, you cover everything.
 
 Schedule:
-  Day 0 (Mon): cells 0, 7, 14, 21, ...  (every 7th cell starting at 0)
-  Day 1 (Tue): cells 1, 8, 15, 22, ...
+  Day 0:  cells 0, 14, 28, 42, ...   (every 14th starting at 0)
+  Day 1:  cells 1, 15, 29, 43, ...
   ...
-  Day 6 (Sun): cells 6, 13, 20, ...
-  → Full coverage every 7 days
+  Day 13: cells 13, 27, 41, ...
+  Day 14: back to cells 0, 14, ...   (refresh cycle)
 """
 
 import os
@@ -35,7 +31,7 @@ import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-print("STARTING SCRAPER (Free daily-batch strategy)")
+print("STARTING SCRAPER (Free daily-batch strategy v2)")
 
 # ==========================================
 # CONFIGURATION
@@ -46,30 +42,29 @@ LAT_NORTH, LAT_SOUTH = -37.5, -38.5
 LNG_WEST, LNG_EAST = 144.35, 145.40
 
 HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'
-PROXY_URL = os.getenv('PROXY_URL')  # optional — works without it
+PROXY_URL = os.getenv('PROXY_URL')   # optional
 
 NAV_TIMEOUT_MS = 45_000
 
-# How many cells to do per run — keep small to avoid detection
-CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '14'))   # ~196/7 days
-ROTATION_STRIDE = 14                                      # cells modulo 7 = today's slice
+# Daily slice size — 14 cells × 14 days = 196 total
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '14'))
+ROTATION_STRIDE = 14
 
-# Pacing — generous, mimics a human browsing
+# Pacing
 DELAY_BETWEEN_REQUESTS = (10.0, 22.0)
 PAGES_BEFORE_REST = 10
 REST_DURATION = (90.0, 180.0)
 
-# Hard cap pages — humans rarely go past page 3 on a search
+# Hard cap pages per query
 MAX_PAGES_PER_QUERY = 3
 
 # Cell strike budget
 CELL_MAX_STRIKES = 2
 
-# If we get blocked this many cells in a row, stop the entire run early
-# (save what we have, try again tomorrow with fresh trust)
+# Stop early if too many consecutive blocks
 MAX_CONSECUTIVE_BLOCKS = 3
 
-# Real suburb names for the warm-up. Random pick each session.
+# Real suburb names for warm-up
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
     'fitzroy-vic-3065', 'south-yarra-vic-3141', 'carlton-vic-3053',
@@ -78,7 +73,6 @@ WARMUP_SUBURBS = [
 ]
 
 SEARCH_MODES = [
-    # We'll randomise the order each cell to look less robotic
     ('For Sale', 'sale', 'excludeunderoffer=1'),
     ('Sold', 'sold-listings', ''),
 ]
@@ -160,10 +154,10 @@ def save_incremental_data(new_data_list, file_path):
 
 
 # ==========================================
-# BEHAVIORAL SIMULATION
+# BEHAVIORAL SIMULATION — scroll only, no mouse.move (hangs with Camoufox)
 # ==========================================
 def simulate_human_behavior(page):
-    """Random scroll + occasional mouse movement to look human."""
+    """Random scroll to look human. No mouse.move — it hangs."""
     try:
         for _ in range(random.randint(1, 3)):
             scroll_distance = random.randint(200, 900)
@@ -172,14 +166,6 @@ def simulate_human_behavior(page):
         if random.random() < 0.4:
             page.evaluate(f"window.scrollBy(0, -{random.randint(100, 400)})")
             human_delay(0.4, 1.0)
-        # Random mouse movement
-        if random.random() < 0.5:
-            try:
-                x = random.randint(100, 1000)
-                y = random.randint(100, 600)
-                page.mouse.move(x, y, steps=random.randint(5, 15))
-            except Exception:
-                pass
     except Exception:
         pass
 
@@ -287,7 +273,7 @@ def is_access_denied(page):
 
 
 def get_next_data(page, url):
-    """Returns dict payload, 'BLOCKED', or 'EMPTY'."""
+    """Returns dict payload, or 'BLOCKED'."""
     try:
         page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
     except (PlaywrightTimeout, Exception):
@@ -324,9 +310,9 @@ def get_next_data(page, url):
 def make_camoufox_kwargs():
     kwargs = {
         'headless': HEADLESS,
-        'humanize': True,           # Camoufox's built-in mouse humanization
+        'humanize': False,          # ⚠️ MUST be False — True causes hangs
         'locale': 'en-AU',
-        'os': random.choice(['windows', 'macos']),  # vary fingerprint
+        'os': random.choice(['windows', 'macos']),
     }
     if PROXY_URL:
         kwargs['proxy'] = {'server': PROXY_URL}
@@ -353,7 +339,7 @@ def warm_up(page):
         print(f"   ⚠️ Homepage exception: {e}")
         return False
 
-    # Step 2: visit a real suburb profile (looks like genuine interest)
+    # Step 2: suburb profile
     suburb = random.choice(WARMUP_SUBURBS)
     print(f"   🌐 Warm-up step 2: /suburb-profile/{suburb}")
     try:
@@ -371,9 +357,8 @@ def warm_up(page):
     except Exception as e:
         print(f"   ⚠️ Suburb profile exception: {e}")
 
-    # Step 3: do a real suburb search (matches URL pattern of normal users)
+    # Step 3: real suburb search
     try:
-        suburb_slug = suburb.replace('-vic-', '+vic+')
         print(f"   🌐 Warm-up step 3: real search for {suburb}")
         page.goto(f'https://www.domain.com.au/sale/{suburb}/',
                   timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
@@ -401,11 +386,10 @@ def warm_up(page):
 # CELL SELECTION — daily rotation
 # ==========================================
 def select_cells_for_today(all_cells):
-    """Pick a rotating slice based on day of year + a small randomization."""
+    """Pick a rotating slice based on day of year."""
     today = dt.date.today()
     offset = today.toordinal() % ROTATION_STRIDE
     selected = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
-    # Cap at CELLS_PER_RUN, shuffle so order isn't predictable
     random.shuffle(selected)
     selected = selected[:CELLS_PER_RUN]
     return selected
@@ -430,7 +414,7 @@ def main():
         except pd.errors.EmptyDataError:
             pass
 
-    # Build the full cell list
+    # Build full cell list
     lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
     lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
     all_cells = []
@@ -479,7 +463,7 @@ def main():
                 cell_strikes = 0
                 pages_in_cell = 0
 
-                # Randomise mode order — sometimes user looks at Sold first, sometimes Sale
+                # Randomise mode order
                 modes = list(SEARCH_MODES)
                 random.shuffle(modes)
 
@@ -520,7 +504,7 @@ def main():
                             print(f"   + {len(page_records)} ({status_label} pg {pg}/{total_pages})")
                         elif pg == 1:
                             print(f"   ◌ No {status_label} listings")
-                            break  # no point checking pg 2 if pg 1 is empty
+                            break
 
                         if pg >= total_pages:
                             break
@@ -535,7 +519,7 @@ def main():
                     consecutive_blocks += 1
                     print(f"   🚫 Cell blocked (run: {consecutive_blocks} in a row)")
                 else:
-                    consecutive_blocks = 0  # empty area, not blocked
+                    consecutive_blocks = 0
     except Exception as e:
         print(f"\n❌ Session exception: {e}")
 
@@ -546,8 +530,6 @@ def main():
     print(f"   Cells done:  {cells_done}/{len(todays_cells)}")
     print(f"   New records: {total_records}")
 
-    # Soft exit — don't fail GitHub Actions for 0 new records
-    # (genuinely empty area days are fine)
     if total_records == 0 and consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
         print("⚠️  Stopped early due to blocks — partial run")
         sys.exit(1)
