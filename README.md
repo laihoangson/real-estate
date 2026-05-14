@@ -25,7 +25,7 @@ real-estate/
 │   ├── melbourne_price_data_enriched.csv      (joined with ABS, crime, train distance)
 │   └── melbourne_suburb_boundaries.geojson    (suburb polygons)
 │
-├── etl/                               ETL scripts (run weekly by GitHub Actions)
+├── etl/                               ETL scripts 
 │   ├── extract_house_price.py                 Scrape Domain listings
 │   ├── enrich_property_data.py                Join demographic and crime data
 │   └── get_geojson.py                         Fetch suburb boundaries
@@ -38,7 +38,7 @@ real-estate/
 │   ├── models/                                Models saved from the notebook
 │   └── report_data/                           Datasets from the notebook
 │
-├── production/                        Production pipeline (runs weekly)
+├── production/                        Production pipeline 
 │   ├── config.py                              Constants, paths, hyperparameters
 │   ├── clean.py                               Data cleaning and outlier handling
 │   ├── train_pipeline.py                      Feature engineering, model training, ONNX export
@@ -79,7 +79,7 @@ real-estate/
 ┌─────────────────────┐
 │ Domain.com.au       │
 └──────────┬──────────┘
-           │ scraper.yml (weekly)
+           │ scraper.yml 
            ▼
 ┌─────────────────────┐     ┌──────────────────┐
 │ melbourne_price_    │ ◄── │ ABS demographics │
@@ -92,7 +92,7 @@ real-estate/
 │ melbourne_price_    │
 │ data_enriched.csv   │
 └──────────┬──────────┘
-           │ production_update.yml (Sundays 9 AM Melbourne)
+           │ production_update.yml 
            ▼
 ┌─────────────────────────────────────────────┐
 │ clean.py → train_pipeline.py → predict.py   │
