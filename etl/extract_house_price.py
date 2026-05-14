@@ -1,26 +1,25 @@
 """
-Domain.com.au scraper using Camoufox (Firefox stealth) to bypass Akamai Bot Manager.
+Domain.com.au scraper — FREE DAILY-BATCH STRATEGY
 
-Why Camoufox:
-- Domain.com.au uses Akamai (errors.edgesuite.net = Akamai EdgeSuite)
-- Akamai is significantly harder than Cloudflare; Patchright/Playwright fail
-- Camoufox patches Firefox at the C++ layer (not JS hooks), passes JA4 + canvas + WebGL
-- Has been tested working against Akamai-protected sites in 2026
+Strategy: instead of scraping all 196 cells in one big run (which Akamai blocks),
+scrape a SMALL ROTATING SUBSET each day. Over a week, you cover everything.
 
-Setup (run once):
-    pip install camoufox[geoip] pandas beautifulsoup4 numpy
-    python -m camoufox fetch
+Each run:
+- Picks ~25 cells from the grid using a rotating offset (based on day of year)
+- Only fetches page 1-3 per query (humans don't paginate deeper)
+- Strong warm-up: homepage → suburb profile → real search before grid queries
+- Saves progress so partial runs are still useful
+- Designed to look like a casual house-hunter, not a data scraper
 
-Usage:
-    python etl/extract_house_price.py
+You already have 163k records. This script's job is to KEEP THEM FRESH, not
+to re-scrape everything. Set up GitHub Actions to run daily.
 
-Important behavioral notes:
-- The script does real human-like browsing: visits homepage, scrolls, waits,
-  then navigates to search URLs while keeping the same session.
-- Akamai cookies (_abck, bm_sz) accumulate trust score over time, so DON'T
-  restart browser between cells — keep the same session for the entire run.
-- If Akamai blocks after warm-up succeeded, it usually means the access
-  pattern is too bot-like (too fast, no scroll, etc.) — increase delays.
+Schedule:
+  Day 0 (Mon): cells 0, 7, 14, 21, ...  (every 7th cell starting at 0)
+  Day 1 (Tue): cells 1, 8, 15, 22, ...
+  ...
+  Day 6 (Sun): cells 6, 13, 20, ...
+  → Full coverage every 7 days
 """
 
 import os
@@ -30,12 +29,13 @@ import time
 import math
 import random
 import re
+import datetime as dt
 import pandas as pd
 import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-print("STARTING SCRAPER (Camoufox vs Akamai)")
+print("STARTING SCRAPER (Free daily-batch strategy)")
 
 # ==========================================
 # CONFIGURATION
@@ -45,22 +45,44 @@ GRID_SIZE = 14
 LAT_NORTH, LAT_SOUTH = -37.5, -38.5
 LNG_WEST, LNG_EAST = 144.35, 145.40
 
-# Headless: false locally (better fingerprint), true on CI
 HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'
+PROXY_URL = os.getenv('PROXY_URL')  # optional — works without it
 
-# Optional proxy — set PROXY_URL env var to enable, e.g.
-#   PROXY_URL='http://user:pass@proxy.example.com:8080'
-PROXY_URL = os.getenv('PROXY_URL')
+NAV_TIMEOUT_MS = 45_000
 
-NAV_TIMEOUT_MS = 45_000  # Akamai challenges can take 5-10s
-CELL_MAX_STRIKES = 3
-EARLY_ABORT_CELLS = 5
-DELAY_BETWEEN_REQUESTS = (4.0, 8.0)  # seconds, Akamai is strict on rate
+# How many cells to do per run — keep small to avoid detection
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '14'))   # ~196/7 days
+ROTATION_STRIDE = 14                                      # cells modulo 7 = today's slice
+
+# Pacing — generous, mimics a human browsing
+DELAY_BETWEEN_REQUESTS = (10.0, 22.0)
+PAGES_BEFORE_REST = 10
+REST_DURATION = (90.0, 180.0)
+
+# Hard cap pages — humans rarely go past page 3 on a search
+MAX_PAGES_PER_QUERY = 3
+
+# Cell strike budget
+CELL_MAX_STRIKES = 2
+
+# If we get blocked this many cells in a row, stop the entire run early
+# (save what we have, try again tomorrow with fresh trust)
+MAX_CONSECUTIVE_BLOCKS = 3
+
+# Real suburb names for the warm-up. Random pick each session.
+WARMUP_SUBURBS = [
+    'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
+    'fitzroy-vic-3065', 'south-yarra-vic-3141', 'carlton-vic-3053',
+    'footscray-vic-3011', 'brighton-vic-3186', 'hawthorn-vic-3122',
+    'prahran-vic-3181', 'collingwood-vic-3066', 'northcote-vic-3070',
+]
 
 SEARCH_MODES = [
+    # We'll randomise the order each cell to look less robotic
     ('For Sale', 'sale', 'excludeunderoffer=1'),
     ('Sold', 'sold-listings', ''),
 ]
+
 
 # ==========================================
 # HELPERS — price parsing, distance, save
@@ -114,7 +136,6 @@ def calculate_distance_to_cbd(lat2, lon2):
 
 
 def human_delay(min_sec, max_sec):
-    """Sleep with random duration."""
     time.sleep(random.uniform(min_sec, max_sec))
 
 
@@ -139,26 +160,32 @@ def save_incremental_data(new_data_list, file_path):
 
 
 # ==========================================
-# BEHAVIORAL SIMULATION — fool Akamai's behavior analysis
+# BEHAVIORAL SIMULATION
 # ==========================================
 def simulate_human_behavior(page):
-    """
-    Light behavior sim — just scroll. We let Camoufox's built-in humanize=True
-    handle cursor movement (mouse.move() can deadlock with humanize).
-    """
+    """Random scroll + occasional mouse movement to look human."""
     try:
-        scroll_distance = random.randint(200, 800)
-        page.evaluate(f"window.scrollBy(0, {scroll_distance})")
-        human_delay(0.5, 1.2)
-        if random.random() < 0.3:
-            page.evaluate(f"window.scrollBy(0, -{random.randint(50, 200)})")
-            human_delay(0.3, 0.6)
-    except Exception as e:
-        print(f"   (behavior sim skipped: {e})")
+        for _ in range(random.randint(1, 3)):
+            scroll_distance = random.randint(200, 900)
+            page.evaluate(f"window.scrollBy(0, {scroll_distance})")
+            human_delay(0.6, 1.8)
+        if random.random() < 0.4:
+            page.evaluate(f"window.scrollBy(0, -{random.randint(100, 400)})")
+            human_delay(0.4, 1.0)
+        # Random mouse movement
+        if random.random() < 0.5:
+            try:
+                x = random.randint(100, 1000)
+                y = random.randint(100, 600)
+                page.mouse.move(x, y, steps=random.randint(5, 15))
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 # ==========================================
-# PAYLOAD PARSING — extract from __NEXT_DATA__
+# PAYLOAD PARSING
 # ==========================================
 def parse_listings_payload(payload, status_label, seen_records):
     props = payload.get('props', {}).get('pageProps', {}).get('componentProps', {})
@@ -244,15 +271,13 @@ def parse_listings_payload(payload, status_label, seen_records):
 
 
 # ==========================================
-# NAVIGATION WITH AKAMAI HANDLING
+# NAVIGATION + AKAMAI HANDLING
 # ==========================================
 def is_access_denied(page):
-    """Check if Akamai returned 'Access Denied' page."""
     try:
         title = (page.title() or '').lower()
-        if 'access denied' in title:
+        if 'access denied' in title or 'pardon our interruption' in title:
             return True
-        # Akamai sometimes shows challenge inline; check body
         body = page.evaluate("() => document.body ? document.body.innerText.slice(0, 300) : ''")
         if 'access denied' in body.lower() or 'pardon our interruption' in body.lower():
             return True
@@ -262,52 +287,135 @@ def is_access_denied(page):
 
 
 def get_next_data(page, url):
-    """
-    Navigate to URL, handle Akamai, extract __NEXT_DATA__ JSON.
-    Returns dict or None.
-    """
+    """Returns dict payload, 'BLOCKED', or 'EMPTY'."""
     try:
         page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-    except PlaywrightTimeout:
-        return None
-    except Exception as e:
-        print(f"   ⚠️ Navigation error: {e}")
-        return None
+    except (PlaywrightTimeout, Exception):
+        return 'BLOCKED'
 
-    # Give Akamai challenge time to resolve
     try:
         page.wait_for_load_state('networkidle', timeout=20_000)
     except PlaywrightTimeout:
         pass
 
-    # Check for Access Denied
     if is_access_denied(page):
-        return None
+        return 'BLOCKED'
 
-    # Simulate browsing behavior (helps trust score)
     simulate_human_behavior(page)
 
-    # Extract __NEXT_DATA__
     try:
         content = page.evaluate(
             "() => { const t = document.getElementById('__NEXT_DATA__'); return t ? t.textContent : null; }"
         )
     except Exception:
-        return None
+        return 'BLOCKED'
 
     if not content:
-        return None
+        return 'BLOCKED'
     try:
         return json.loads(content)
     except json.JSONDecodeError:
-        return None
+        return 'BLOCKED'
+
+
+# ==========================================
+# BROWSER LIFECYCLE
+# ==========================================
+def make_camoufox_kwargs():
+    kwargs = {
+        'headless': HEADLESS,
+        'humanize': True,           # Camoufox's built-in mouse humanization
+        'locale': 'en-AU',
+        'os': random.choice(['windows', 'macos']),  # vary fingerprint
+    }
+    if PROXY_URL:
+        kwargs['proxy'] = {'server': PROXY_URL}
+        kwargs['geoip'] = True
+    return kwargs
+
+
+def warm_up(page):
+    """Multi-step warm-up: homepage → suburb profile → real search."""
+    print("   🌐 Warm-up step 1: homepage...")
+    try:
+        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=20_000)
+        except PlaywrightTimeout:
+            pass
+        if is_access_denied(page):
+            print("   ❌ Homepage blocked. IP rejected.")
+            return False
+        print(f"   ✅ '{page.title()[:60]}'")
+        simulate_human_behavior(page)
+        human_delay(3.0, 6.0)
+    except Exception as e:
+        print(f"   ⚠️ Homepage exception: {e}")
+        return False
+
+    # Step 2: visit a real suburb profile (looks like genuine interest)
+    suburb = random.choice(WARMUP_SUBURBS)
+    print(f"   🌐 Warm-up step 2: /suburb-profile/{suburb}")
+    try:
+        page.goto(f'https://www.domain.com.au/suburb-profile/{suburb}',
+                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        if is_access_denied(page):
+            print("   ⚠️ Suburb profile blocked — continuing anyway")
+        else:
+            simulate_human_behavior(page)
+            human_delay(4.0, 8.0)
+    except Exception as e:
+        print(f"   ⚠️ Suburb profile exception: {e}")
+
+    # Step 3: do a real suburb search (matches URL pattern of normal users)
+    try:
+        suburb_slug = suburb.replace('-vic-', '+vic+')
+        print(f"   🌐 Warm-up step 3: real search for {suburb}")
+        page.goto(f'https://www.domain.com.au/sale/{suburb}/',
+                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        if is_access_denied(page):
+            print("   ⚠️ Search blocked — continuing")
+        else:
+            simulate_human_behavior(page)
+            human_delay(3.0, 7.0)
+    except Exception as e:
+        print(f"   ⚠️ Search exception: {e}")
+
+    # Check Akamai cookies
+    cookies = page.context.cookies()
+    cookie_names = [c['name'] for c in cookies]
+    has_abck = '_abck' in cookie_names
+    print(f"   🍪 Akamai _abck cookie: {has_abck}")
+    return has_abck
+
+
+# ==========================================
+# CELL SELECTION — daily rotation
+# ==========================================
+def select_cells_for_today(all_cells):
+    """Pick a rotating slice based on day of year + a small randomization."""
+    today = dt.date.today()
+    offset = today.toordinal() % ROTATION_STRIDE
+    selected = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
+    # Cap at CELLS_PER_RUN, shuffle so order isn't predictable
+    random.shuffle(selected)
+    selected = selected[:CELLS_PER_RUN]
+    return selected
 
 
 # ==========================================
 # MAIN
 # ==========================================
 def main():
-    # Load existing data
+    # Load existing dedup data
     seen_records = {}
     if os.path.exists(FILE_NAME) and os.path.getsize(FILE_NAME) > 0:
         try:
@@ -322,85 +430,60 @@ def main():
         except pd.errors.EmptyDataError:
             pass
 
+    # Build the full cell list
     lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
     lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
-    total_cells = GRID_SIZE * GRID_SIZE
-    total_records = 0
-    cells_with_any_data = 0
-    cells_completely_failed = 0
-    cell_idx = 0
+    all_cells = []
+    for i in range(GRID_SIZE):
+        for j in range(GRID_SIZE):
+            t_lat = round(LAT_NORTH - (i * lat_step), 4)
+            b_lat = round(LAT_NORTH - ((i + 1) * lat_step), 4)
+            l_lng = round(LNG_WEST + (j * lng_step), 4)
+            r_lng = round(LNG_WEST + ((j + 1) * lng_step), 4)
+            all_cells.append((t_lat, b_lat, l_lng, r_lng))
 
-    # Camoufox config — Australian locale + viewport.
-    # humanize=False because it can deadlock in headful mode on Windows
-    # when there's no real mouse interaction; we simulate behavior via scroll only.
-    camoufox_kwargs = {
-        'headless': HEADLESS,
-        'humanize': False,
-        'locale': 'en-AU',
-        'os': 'windows',
-    }
+    # Pick today's slice
+    todays_cells = select_cells_for_today(all_cells)
+    print(f"   📅 Today's slice: {len(todays_cells)} cells out of {len(all_cells)} total")
+
     if PROXY_URL:
-        camoufox_kwargs['proxy'] = {'server': PROXY_URL}
-        camoufox_kwargs['geoip'] = True  # only useful with a proxy
-        print(f"   🛡️ Using proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
+        print(f"   🛡️ Proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
+    else:
+        print("   ⚠️  No proxy — relying on Camoufox fingerprinting alone")
 
-    with Camoufox(**camoufox_kwargs) as browser:
-        page = browser.new_page()
+    total_records = 0
+    cells_done = 0
+    consecutive_blocks = 0
 
-        # Warm-up sequence: visit homepage, browse a bit, then start searching
-        print("   🌐 Warm-up: visiting homepage...")
-        try:
-            page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-            try:
-                page.wait_for_load_state('networkidle', timeout=20_000)
-            except PlaywrightTimeout:
-                pass
+    try:
+        with Camoufox(**make_camoufox_kwargs()) as browser:
+            page = browser.new_page()
 
-            if is_access_denied(page):
-                print("   ❌ Even homepage blocked. Akamai is rejecting this IP/fingerprint.")
-                print("   Try: residential proxy via PROXY_URL env var, or use a paid scraping API.")
+            if not warm_up(page):
+                print("\n❌ Warm-up failed. IP likely flagged.")
+                print("   Try again later, or use a residential proxy.")
                 sys.exit(1)
 
-            print(f"   ✅ Homepage: '{page.title()[:60]}'")
+            human_delay(4.0, 8.0)
 
-            # Browse for a few seconds to build trust score
-            print("   🧍 Simulating browsing behavior...")
-            for k in range(3):
-                print(f"      step {k+1}/3: scroll...")
-                simulate_human_behavior(page)
-                print(f"      step {k+1}/3: wait...")
-                human_delay(1.5, 3.0)
-            print("   ✅ Behavior simulation done")
+            for idx, (cell_idx, cell) in enumerate(todays_cells, 1):
+                if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
+                    print(f"\n🛑 {consecutive_blocks} blocked cells in a row — stopping early")
+                    print(f"   Saving partial data. Try again tomorrow.")
+                    break
 
-            # Verify Akamai cookie is set
-            cookies = page.context.cookies()
-            cookie_names = [c['name'] for c in cookies]
-            has_abck = '_abck' in cookie_names
-            has_bm_sz = 'bm_sz' in cookie_names
-            print(f"   🍪 Akamai cookies: _abck={has_abck}, bm_sz={has_bm_sz}")
-            if not has_abck:
-                print("   ⚠️ _abck cookie missing — Akamai may not trust this session yet")
-
-        except Exception as e:
-            print(f"   ❌ Warm-up failed: {e}")
-            sys.exit(1)
-
-        human_delay(3.0, 6.0)
-
-        # Main scraping loop
-        for i in range(GRID_SIZE):
-            for j in range(GRID_SIZE):
-                cell_idx += 1
-                t_lat = round(LAT_NORTH - (i * lat_step), 4)
-                b_lat = round(LAT_NORTH - ((i + 1) * lat_step), 4)
-                l_lng = round(LNG_WEST + (j * lng_step), 4)
-                r_lng = round(LNG_WEST + ((j + 1) * lng_step), 4)
-                print(f"\n📍 Cell [{cell_idx}/{total_cells}] | {t_lat},{l_lng} → {b_lat},{r_lng}")
+                t_lat, b_lat, l_lng, r_lng = cell
+                print(f"\n📍 [{idx}/{len(todays_cells)}] cell #{cell_idx} | {t_lat},{l_lng} → {b_lat},{r_lng}")
 
                 cell_records = 0
                 cell_strikes = 0
+                pages_in_cell = 0
 
-                for status_label, mode_path, mode_extra in SEARCH_MODES:
+                # Randomise mode order — sometimes user looks at Sold first, sometimes Sale
+                modes = list(SEARCH_MODES)
+                random.shuffle(modes)
+
+                for status_label, mode_path, mode_extra in modes:
                     if cell_strikes >= CELL_MAX_STRIKES:
                         break
 
@@ -408,58 +491,65 @@ def main():
                     if mode_extra:
                         base_query = f"{mode_extra}&{base_query}"
 
-                    page1_url = f"https://www.domain.com.au/{mode_path}/?{base_query}&page=1"
-                    payload = get_next_data(page, page1_url)
-                    if payload is None:
-                        cell_strikes += 1
-                        print(f"   ⚠️ Failed on {status_label} page 1 (strike {cell_strikes}/{CELL_MAX_STRIKES})")
-                        human_delay(*DELAY_BETWEEN_REQUESTS)
-                        continue
-
-                    page_records, total_pages = parse_listings_payload(payload, status_label, seen_records)
-                    if page_records:
-                        save_incremental_data(page_records, FILE_NAME)
-                        cell_records += len(page_records)
-                        print(f"   + {len(page_records)} records ({status_label}, page 1/{total_pages})")
-
-                    for pg in range(2, total_pages + 1):
+                    for pg in range(1, MAX_PAGES_PER_QUERY + 1):
                         if cell_strikes >= CELL_MAX_STRIKES:
                             break
-                        human_delay(*DELAY_BETWEEN_REQUESTS)
+
+                        # Pacing rest
+                        if pages_in_cell >= PAGES_BEFORE_REST:
+                            rest = random.uniform(*REST_DURATION)
+                            print(f"   ☕ Rest {rest:.0f}s")
+                            time.sleep(rest)
+                            pages_in_cell = 0
+                        elif pg > 1:
+                            human_delay(*DELAY_BETWEEN_REQUESTS)
+
                         url = f"https://www.domain.com.au/{mode_path}/?{base_query}&page={pg}"
                         payload = get_next_data(page, url)
-                        if payload is None:
+                        pages_in_cell += 1
+
+                        if payload == 'BLOCKED':
                             cell_strikes += 1
-                            print(f"   ⚠️ Failed on {status_label} page {pg} (strike {cell_strikes}/{CELL_MAX_STRIKES})")
+                            print(f"   ⚠️ Block: {status_label} pg {pg} (strike {cell_strikes}/{CELL_MAX_STRIKES})")
                             continue
-                        page_records, _ = parse_listings_payload(payload, status_label, seen_records)
+
+                        page_records, total_pages = parse_listings_payload(payload, status_label, seen_records)
                         if page_records:
                             save_incremental_data(page_records, FILE_NAME)
                             cell_records += len(page_records)
-                            print(f"   + {len(page_records)} records ({status_label}, page {pg}/{total_pages})")
+                            print(f"   + {len(page_records)} ({status_label} pg {pg}/{total_pages})")
+                        elif pg == 1:
+                            print(f"   ◌ No {status_label} listings")
+                            break  # no point checking pg 2 if pg 1 is empty
+
+                        if pg >= total_pages:
+                            break
 
                     human_delay(*DELAY_BETWEEN_REQUESTS)
 
                 if cell_records > 0:
-                    cells_with_any_data += 1
                     total_records += cell_records
+                    cells_done += 1
+                    consecutive_blocks = 0
+                elif cell_strikes > 0:
+                    consecutive_blocks += 1
+                    print(f"   🚫 Cell blocked (run: {consecutive_blocks} in a row)")
                 else:
-                    cells_completely_failed += 1
+                    consecutive_blocks = 0  # empty area, not blocked
+    except Exception as e:
+        print(f"\n❌ Session exception: {e}")
 
-                # Early abort on systemic block
-                if cell_idx == EARLY_ABORT_CELLS and cells_with_any_data == 0:
-                    print(f"\n❌ SYSTEMIC BLOCK: {EARLY_ABORT_CELLS} cells failed.")
-                    print("   Akamai is rejecting all search requests despite Camoufox.")
-                    print("   Next step: try a residential proxy via PROXY_URL env var.")
-                    sys.exit(1)
+    # Final report
+    print(f"\n{'='*60}")
+    print("✅ DONE")
+    print(f"{'='*60}")
+    print(f"   Cells done:  {cells_done}/{len(todays_cells)}")
+    print(f"   New records: {total_records}")
 
-    print(f"\n✅ SCRAPING COMPLETED")
-    print(f"   Cells with data: {cells_with_any_data}/{total_cells}")
-    print(f"   Cells failed:    {cells_completely_failed}/{total_cells}")
-    print(f"   New records:     {total_records}")
-
-    if total_records == 0 and len(seen_records) == 0:
-        print("❌ Zero records scraped — failing job")
+    # Soft exit — don't fail GitHub Actions for 0 new records
+    # (genuinely empty area days are fine)
+    if total_records == 0 and consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
+        print("⚠️  Stopped early due to blocks — partial run")
         sys.exit(1)
 
 

@@ -1,11 +1,11 @@
-name: Melbourne Property - Scrape + Enrich
+name: Melbourne Property - Daily Scrape + Enrich
 
 permissions:
   contents: write
 
 on:
- # schedule:
- #   - cron: "0 14 * * 6"   # Saturday 14:00 UTC = Sunday 00:00/01:00 Melbourne (AEST/AEDT)
+  schedule:
+    - cron: "0 14 * * *"   # Daily 14:00 UTC = ~00:00/01:00 Melbourne (AEST/AEDT)
   workflow_dispatch:
 
 env:
@@ -14,17 +14,17 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────
-  # JOB 1: Scrape domain.com.au using Camoufox (stealth Firefox)
+  # JOB 1: Daily batch scrape (14 cells/day, full coverage in 14 days)
   # ──────────────────────────────────────────────
   scrape:
-    name: 1 - Scrape domain.com.au
+    name: 1 - Scrape domain.com.au (daily batch)
     runs-on: ubuntu-latest
-    timeout-minutes: 180   # Camoufox ~1.5–2h for full 196-cell grid
+    timeout-minutes: 60
 
     env:
-      HEADLESS: "true"                            # CI has no display
-      PROXY_URL: ${{ secrets.PROXY_URL }}         # optional residential proxy
-      # Xvfb display for any GUI code paths
+      HEADLESS: "true"
+      PROXY_URL: ${{ secrets.PROXY_URL }}
+      CELLS_PER_RUN: "14"
       DISPLAY: ":99"
 
     steps:
@@ -37,9 +37,6 @@ jobs:
           python-version: "3.11"
 
       - name: Install Firefox + Xvfb system dependencies
-        # Camoufox bundles its own Firefox binary, but Ubuntu still needs the
-        # shared libraries Firefox links against, plus Xvfb for headless mode
-        # (Camoufox uses a virtual display even when headless=true).
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -54,7 +51,6 @@ jobs:
           pip install "camoufox[geoip]" pandas beautifulsoup4 numpy playwright
 
       - name: Cache Camoufox binary
-        # Camoufox downloads ~150MB Firefox build the first time; cache it.
         id: cache-camoufox
         uses: actions/cache@v4
         with:
@@ -66,32 +62,31 @@ jobs:
         run: python -m camoufox fetch
 
       - name: Start Xvfb virtual display
-        # Camoufox needs a display even in "headless" mode.
         run: |
           Xvfb :99 -screen 0 1366x768x24 &
           sleep 2
 
-      - name: Run scraper
-        run: python etl/extract_house_price.py
+      - name: Run daily scraper
+        run: python etl/extract_house_price_daily.py
 
       - name: Commit & push scraped data
-        if: always()   # commit even if scrape was partial
+        if: always()
         run: |
           git config --global user.name "laihoangson"
           git config --global user.email "lson21757@gmail.com"
           git add ${{ env.SCRAPE_FILE }}
-          git diff --cached --quiet || git commit -m "Auto update property data (Scraped) [skip ci]"
+          git diff --cached --quiet || git commit -m "Auto update property data (Daily $(date -u +%Y-%m-%d)) [skip ci]"
           git pull origin main --rebase || true
           git push || true
 
   # ──────────────────────────────────────────────
-  # JOB 2: Enrich (ABS, Crime, PTV)
+  # JOB 2: Enrich — chạy bất kể job 1 success hay fail (trừ khi cancel)
   # ──────────────────────────────────────────────
   enrich:
     name: 2 - Enrich with ABS / Crime / PTV
     runs-on: ubuntu-latest
     needs: scrape
-    if: success() || failure()   # still try to enrich even if scrape was partial
+    if: always() && needs.scrape.result != 'cancelled'
     timeout-minutes: 60
 
     steps:
@@ -100,25 +95,47 @@ jobs:
         with:
           ref: main
 
+      - name: Check if Sunday (skip enrich on other days)
+        id: check_day
+        run: |
+          if [ "$(date -u +%u)" = "7" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+            echo "⏭️  Skipping enrich (not Sunday)"
+          fi
+
+      - name: Log scrape job status
+        if: steps.check_day.outputs.should_run == 'true'
+        run: |
+          echo "📊 Scrape job result was: ${{ needs.scrape.result }}"
+          if [ "${{ needs.scrape.result }}" = "failure" ]; then
+            echo "⚠️  Scrape failed, but enriching existing data anyway"
+          fi
+
       - name: Setup Python 3.11
+        if: steps.check_day.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install enrich dependencies
+        if: steps.check_day.outputs.should_run == 'true'
         run: pip install pandas requests openpyxl tqdm
 
       - name: Run enrichment
+        if: steps.check_day.outputs.should_run == 'true'
         run: |
           python etl/enrich_property_data.py \
             --input  ${{ env.SCRAPE_FILE }} \
             --output ${{ env.ENRICH_FILE }}
 
       - name: Commit & push enriched data
+        if: steps.check_day.outputs.should_run == 'true'
         run: |
           git config --global user.name "laihoangson"
           git config --global user.email "lson21757@gmail.com"
           git add ${{ env.ENRICH_FILE }}
-          git diff --cached --quiet || git commit -m "Auto update property data (Enriched) [skip ci]"
+          git diff --cached --quiet || git commit -m "Auto update property data (Enriched weekly) [skip ci]"
           git pull origin main --rebase || true
           git push || true
