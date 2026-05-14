@@ -43,7 +43,7 @@ real-estate/
 │   ├── clean.py                               Data cleaning and outlier handling
 │   ├── train_pipeline.py                      Feature engineering, model training, ONNX export
 │   ├── predict.py                             For Sale inference + deal signals
-│   ├── weekly_update.py                       Orchestrator: clean → train → predict
+│   ├── production_update.py                       Orchestrator: clean → train → predict
 │   └── output/                                Pipeline outputs
 │       ├── cleaned_data.parquet
 │       ├── eda_decisions.json

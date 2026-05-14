@@ -1,4 +1,4 @@
-name: Weekly Production Update
+name: Production Update
 
 on:
 #  schedule:
@@ -60,9 +60,9 @@ jobs:
           fi
           echo "Input CSV size: $(du -h data/melbourne_price_data_enriched.csv | cut -f1)"
 
-      - name: Run weekly update pipeline
+      - name: Run update pipeline
         if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
-        run: python production/weekly_update.py
+        run: python production/production_update.py
 
       - name: Show metrics summary
         if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
@@ -84,7 +84,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "Weekly production update: $(TZ='Australia/Melbourne' date +'%Y-%m-%d %H:%M %Z')"
+            git commit -m "Production update: $(TZ='Australia/Melbourne' date +'%Y-%m-%d %H:%M %Z')"
             git push
           fi
 

@@ -5,7 +5,7 @@ This is the entry point called by GitHub Actions every week after the scraper
 updates data/melbourne_price_data_enriched.csv.
 
 Usage:
-    python production/weekly_update.py
+    python production/production_update.py
 """
 
 import logging
