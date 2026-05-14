@@ -67,7 +67,7 @@ jobs:
           sleep 2
 
       - name: Run daily scraper
-        run: python etl/extract_house_price_daily.py
+        run: python etl/extract_house_price.py
 
       - name: Commit & push scraped data
         if: always()
