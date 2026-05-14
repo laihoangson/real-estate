@@ -151,7 +151,7 @@ All data and models are loaded from the same repo as the dashboard, so weekly pi
 
 ## Automation
 
-GitHub Actions workflows handle scheduled runs:
+GitHub Actions workflows handle runs:
 
 - **scraper.yml**: scrapes Domain.com.au into `data/melbourne_price_data.csv`.
 
