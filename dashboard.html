@@ -134,6 +134,15 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
 .toggle-btn { padding: 5px 14px; font-size: 11px; font-weight: 600; border: none; background: none; border-radius: 6px; cursor: pointer; color: var(--text-muted); font-family: 'DM Sans', sans-serif; transition: all .15s; letter-spacing: 0.3px; }
 .toggle-btn.active { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
 
+/* Inline checkbox toggle (used for map filters that aren't mutually exclusive) */
+.check-toggle { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; user-select: none; font-size: 11.5px; font-weight: 600; color: var(--text-muted); padding: 5px 12px; background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; transition: all .15s; }
+.check-toggle:hover { border-color: var(--border-hover); color: var(--text); }
+.check-toggle input { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; border: 1.5px solid var(--border-hover); border-radius: 3px; cursor: pointer; position: relative; flex-shrink: 0; transition: all .15s; }
+.check-toggle input:checked { background: var(--accent); border-color: var(--accent); }
+.check-toggle input:checked::after { content: '✓'; position: absolute; top: -2px; left: 1px; color: #fff; font-size: 11px; font-weight: 700; }
+.check-toggle:has(input:checked) { color: var(--accent); border-color: rgba(37,99,235,0.3); background: var(--accent-light); }
+.check-toggle.hidden { display: none; }
+
 .scatter-select { background: var(--surface2); border: 1.5px solid var(--border); border-radius: 8px; padding: 5px 10px; font-family: 'DM Sans', sans-serif; font-size: 11.5px; font-weight: 600; color: var(--text-dim); outline: none; cursor: pointer; }
 .scatter-select:focus { border-color: var(--accent); }
 
@@ -356,10 +365,11 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
         <div class="callout">
             <div class="callout-title">How to read the map</div>
             <div class="callout-body">
-                <p>The map has two modes - toggle them using the buttons at the top right of the map panel.</p>
-                <div class="callout-grid">
-                    <div><span class="callout-dot" style="background: #2563eb;"></span><div><b>Points mode</b> - every For Sale listing is a dot, colored by Deal Signal. Click a dot to see asking vs predicted price, specs, and a link to the original Domain listing.</div></div>
-                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>Suburb Choropleth</b> - suburbs colored by their median predicted price. Hover for stats. <b>Click a suburb</b> to filter the entire dashboard to that area.</div></div>
+                <p>The map has three modes - toggle them using the buttons at the top right of the map panel.</p>
+                <div class="callout-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <div><span class="callout-dot" style="background: #2563eb;"></span><div><b>Points (Signal)</b> - every For Sale listing colored by Deal Signal (Good Deal / Fair / Overpriced). Click a dot for asking vs predicted price, specs, and a link to the Domain listing.</div></div>
+                    <div><span class="callout-dot" style="background: #059669;"></span><div><b>Points (Asking Price)</b> - same dots, but colored by asking price bucket (Under $750k → Over $3M). Listings without an asking price show in grey. Tick <b>Hide no-asking</b> to remove them.</div></div>
+                    <div><span class="callout-dot" style="background: #d97706;"></span><div><b>Suburb Choropleth</b> - suburbs colored by median predicted price. Hover for stats. <b>Click a suburb</b> to filter the entire dashboard to that area.</div></div>
                 </div>
             </div>
         </div>
@@ -367,9 +377,16 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
         <div class="panel">
             <div class="panel-head">
                 <span class="panel-title">Valuation Map</span>
-                <div class="toggle-btn-group">
-                    <button class="toggle-btn active" id="btnMapPoints">Points</button>
-                    <button class="toggle-btn" id="btnMapChoro">Suburb Choropleth</button>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <label class="check-toggle hidden" id="hideNoAskWrap">
+                        <input type="checkbox" id="hideNoAskChk">
+                        Hide no-asking
+                    </label>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn active" id="btnMapPoints">Points (Signal)</button>
+                        <button class="toggle-btn" id="btnMapAsking">Points (Asking Price)</button>
+                        <button class="toggle-btn" id="btnMapChoro">Suburb Choropleth</button>
+                    </div>
                 </div>
             </div>
             <div id="map"></div>
@@ -602,7 +619,8 @@ const SCATTER_X_LABELS = {
     'dist_nearest_train_km':    'Distance to nearest train (km)',
 };
 
-let mapMode = 'points';
+let mapMode = 'points';   // 'points' (signal) | 'asking' | 'choro'
+let hideNoAsking = false; // only used in 'asking' mode
 const map = L.map('map', { zoomControl: true, attributionControl: false, preferCanvas: true })
     .setView([-37.8136, 144.9631], 10);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
@@ -663,6 +681,15 @@ function updateLegend() {
         let html = '<div class="mlegend-title">Deal Signal</div>';
         for (const [k, c] of Object.entries(SIGNAL_COLORS)) {
             html += `<div class="mlegend-row"><span class="mlegend-dot" style="background:${c}"></span>${k}</div>`;
+        }
+        div.innerHTML = html;
+    } else if (mapMode === 'asking') {
+        let html = '<div class="mlegend-title">Asking Price</div>';
+        for (const b of PRICE_BUCKETS) {
+            html += `<div class="mlegend-row"><span class="mlegend-dot" style="background:${b.color}"></span>${b.label}</div>`;
+        }
+        if (!hideNoAsking) {
+            html += '<div class="mlegend-row"><span class="mlegend-dot" style="background:#94a3b8"></span>No asking data</div>';
         }
         div.innerHTML = html;
     } else {
@@ -916,46 +943,67 @@ function computeStats(data) {
 /* ════════════════════════════════════════════════════════════
    RENDER MAP
    ════════════════════════════════════════════════════════════ */
+function buildPopupHTML(row) {
+    const sig = row.Deal_Signal || 'No Asking Price';
+    const badgeCls = SIGNAL_BADGE_CLS[sig];
+    const asking = row.Numeric_Price ? fmtMoneyFull(row.Numeric_Price) : '-';
+    const beds  = row.Beds  != null && !isNaN(row.Beds)  ? row.Beds  : '-';
+    const baths = row.Baths != null && !isNaN(row.Baths) ? row.Baths : '-';
+    const cars  = row.Car_Spaces != null && !isNaN(row.Car_Spaces) ? row.Car_Spaces : '-';
+    const land  = row.LandSize_sqm ? row.LandSize_sqm + ' m²' : '-';
+    const cbd   = row.Distance_to_CBD_km ? row.Distance_to_CBD_km.toFixed(1) + ' km' : '-';
+
+    return `<div class="popup-body">
+        <span class="popup-badge ${badgeCls}">${sig}</span>
+        <div class="popup-suburb">${row.Suburb || ''}</div>
+        <div class="popup-meta">${row.Property_Type || '-'} · Postcode ${row.Postcode || '-'}</div>
+        <div class="popup-price">${fmtMoneyFull(row.Predicted_Price)}</div>
+        <div class="popup-range">Range ${fmtMoneyFull(row.Predicted_Price_Lower)} – ${fmtMoneyFull(row.Predicted_Price_Upper)} (${row.Interval_Width_Pct}%)</div>
+        <div class="popup-asking">Asking: <b>${asking}</b></div>
+        <div class="popup-specs">
+            <div class="spec"><div class="spec-l">Beds</div><div class="spec-v">${beds}</div></div>
+            <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${baths}</div></div>
+            <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${cars}</div></div>
+            <div class="spec"><div class="spec-l">Land</div><div class="spec-v">${land}</div></div>
+            <div class="spec"><div class="spec-l">To CBD</div><div class="spec-v">${cbd}</div></div>
+            <div class="spec"><div class="spec-l">Updated</div><div class="spec-v">${row.Last_Updated || '-'}</div></div>
+        </div>
+        ${row.URL && String(row.URL).startsWith('http') ? `<a class="popup-btn" href="${row.URL}" target="_blank" rel="noopener">View on Domain →</a>` : ''}
+    </div>`;
+}
+
 function renderMap(data) {
     markerLayer.clearLayers();
     if (choroLayer) { map.removeLayer(choroLayer); choroLayer = null; }
 
-    if (mapMode === 'points') {
+    if (mapMode === 'points' || mapMode === 'asking') {
         const r0 = dotRadius(map.getZoom());
-        data.forEach(row => {
-            const sig = row.Deal_Signal || 'No Asking Price';
-            const color = SIGNAL_COLORS[sig] || '#94a3b8';
-            const badgeCls = SIGNAL_BADGE_CLS[sig];
 
-            const asking = row.Numeric_Price ? fmtMoneyFull(row.Numeric_Price) : '-';
-            const beds  = row.Beds  != null && !isNaN(row.Beds)  ? row.Beds  : '-';
-            const baths = row.Baths != null && !isNaN(row.Baths) ? row.Baths : '-';
-            const cars  = row.Car_Spaces != null && !isNaN(row.Car_Spaces) ? row.Car_Spaces : '-';
-            const land  = row.LandSize_sqm ? row.LandSize_sqm + ' m²' : '-';
-            const cbd   = row.Distance_to_CBD_km ? row.Distance_to_CBD_km.toFixed(1) + ' km' : '-';
+        // For asking mode: optionally filter out listings with no asking price
+        let pointsData = data;
+        if (mapMode === 'asking' && hideNoAsking) {
+            pointsData = data.filter(r => r.Numeric_Price != null && !isNaN(r.Numeric_Price) && r.Numeric_Price > 0);
+        }
 
-            const popup = `<div class="popup-body">
-                <span class="popup-badge ${badgeCls}">${sig}</span>
-                <div class="popup-suburb">${row.Suburb || ''}</div>
-                <div class="popup-meta">${row.Property_Type || '-'} · Postcode ${row.Postcode || '-'}</div>
-                <div class="popup-price">${fmtMoneyFull(row.Predicted_Price)}</div>
-                <div class="popup-range">Range ${fmtMoneyFull(row.Predicted_Price_Lower)} – ${fmtMoneyFull(row.Predicted_Price_Upper)} (${row.Interval_Width_Pct}%)</div>
-                <div class="popup-asking">Asking: <b>${asking}</b></div>
-                <div class="popup-specs">
-                    <div class="spec"><div class="spec-l">Beds</div><div class="spec-v">${beds}</div></div>
-                    <div class="spec"><div class="spec-l">Baths</div><div class="spec-v">${baths}</div></div>
-                    <div class="spec"><div class="spec-l">Parking</div><div class="spec-v">${cars}</div></div>
-                    <div class="spec"><div class="spec-l">Land</div><div class="spec-v">${land}</div></div>
-                    <div class="spec"><div class="spec-l">To CBD</div><div class="spec-v">${cbd}</div></div>
-                    <div class="spec"><div class="spec-l">Updated</div><div class="spec-v">${row.Last_Updated || '-'}</div></div>
-                </div>
-                ${row.URL && String(row.URL).startsWith('http') ? `<a class="popup-btn" href="${row.URL}" target="_blank" rel="noopener">View on Domain →</a>` : ''}
-            </div>`;
+        pointsData.forEach(row => {
+            let color;
+            if (mapMode === 'points') {
+                // Color by Deal Signal
+                const sig = row.Deal_Signal || 'No Asking Price';
+                color = SIGNAL_COLORS[sig] || '#94a3b8';
+            } else {
+                // Color by asking price bucket; grey for no asking data
+                if (row.Numeric_Price != null && !isNaN(row.Numeric_Price) && row.Numeric_Price > 0) {
+                    color = priceBucketColor(row.Numeric_Price);
+                } else {
+                    color = '#94a3b8';
+                }
+            }
 
             L.circleMarker([row.Latitude, row.Longitude], {
                 radius: r0, fillColor: color, color: 'rgba(255,255,255,0.7)',
                 weight: 1, opacity: 1, fillOpacity: 0.85,
-            }).bindPopup(popup, { maxWidth: 300 }).addTo(markerLayer);
+            }).bindPopup(buildPopupHTML(row), { maxWidth: 300 }).addTo(markerLayer);
         });
     } else {
         if (!geojsonData) return;
@@ -996,25 +1044,31 @@ function renderMap(data) {
 }
 
 map.on('zoomend', () => {
-    if (mapMode === 'points') {
+    if (mapMode === 'points' || mapMode === 'asking') {
         const r = dotRadius(map.getZoom());
         markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
     }
 });
 
-document.getElementById('btnMapPoints').addEventListener('click', () => {
-    if (mapMode === 'points') return;
-    mapMode = 'points';
-    document.getElementById('btnMapPoints').classList.add('active');
-    document.getElementById('btnMapChoro').classList.remove('active');
+function setMapMode(mode) {
+    if (mapMode === mode) return;
+    mapMode = mode;
+    // Toggle active button
+    document.getElementById('btnMapPoints').classList.toggle('active', mode === 'points');
+    document.getElementById('btnMapAsking').classList.toggle('active', mode === 'asking');
+    document.getElementById('btnMapChoro').classList.toggle('active',  mode === 'choro');
+    // Show "Hide no-asking" toggle only in asking mode
+    document.getElementById('hideNoAskWrap').classList.toggle('hidden', mode !== 'asking');
     updateLegend();
     renderMap(filteredData);
-});
-document.getElementById('btnMapChoro').addEventListener('click', () => {
-    if (mapMode === 'choro') return;
-    mapMode = 'choro';
-    document.getElementById('btnMapPoints').classList.remove('active');
-    document.getElementById('btnMapChoro').classList.add('active');
+}
+
+document.getElementById('btnMapPoints').addEventListener('click', () => setMapMode('points'));
+document.getElementById('btnMapAsking').addEventListener('click', () => setMapMode('asking'));
+document.getElementById('btnMapChoro').addEventListener('click',  () => setMapMode('choro'));
+
+document.getElementById('hideNoAskChk').addEventListener('change', e => {
+    hideNoAsking = e.target.checked;
     updateLegend();
     renderMap(filteredData);
 });
