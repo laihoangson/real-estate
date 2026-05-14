@@ -9,14 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       offset:
-        description: 'Cell group (0-13). Leave empty for auto, or "random"'
+        description: 'Cell group (0-6). Leave empty for auto, or "random"'
         required: false
         default: ''
         type: string
       cells_per_run:
         description: 'Number of cells to scrape'
         required: false
-        default: '14'
+        default: '28'
         type: string
 
 env:
@@ -32,7 +32,6 @@ jobs:
     env:
       HEADLESS: "true"
       PROXY_URL: ${{ secrets.PROXY_URL }}
-      # Inputs only have values on workflow_dispatch, default to env values for cron
       CELLS_PER_RUN: ${{ inputs.cells_per_run || '28' }}
       MANUAL_OFFSET: ${{ inputs.offset || '' }}
       DISPLAY: ":99"
