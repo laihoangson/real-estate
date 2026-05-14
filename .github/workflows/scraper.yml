@@ -4,8 +4,8 @@ permissions:
   contents: write
 
 on:
-  schedule:
-    - cron: "0 14 * * 6"   # Saturday 14:00 UTC = Sunday 00:00/01:00 Melbourne (AEST/AEDT)
+ # schedule:
+ #   - cron: "0 14 * * 6"   # Saturday 14:00 UTC = Sunday 00:00/01:00 Melbourne (AEST/AEDT)
   workflow_dispatch:
 
 env:
