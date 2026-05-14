@@ -1,5 +1,5 @@
 {
-  "data_snapshot_date": "2026-05-02",
+  "data_snapshot_date": "2026-05-04",
   "land_property_types": [
     "Development Site",
     "Farm",
@@ -59,8 +59,8 @@
   "price_floor": 50000,
   "price_ceiling": 20000000,
   "landsize_caps_by_type": {
-    "House": 51860.0,
-    "Vacant land": 213926.0,
+    "House": 51858.0,
+    "Vacant land": 213885.0,
     "Rural": 1956387.0,
     "Acreage / Semi-Rural": 1330778.0,
     "Apartment / Unit / Flat": 5414.0,
