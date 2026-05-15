@@ -77,7 +77,7 @@ NEW_BUILD_TYPES = {
 }
 
 # Outlier thresholds.
-PRICE_FLOOR   = 50_000
+PRICE_FLOOR   = 20_000
 PRICE_CEILING = 20_000_000
 
 # Melbourne metro envelope.
