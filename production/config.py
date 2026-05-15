@@ -36,7 +36,7 @@ METRICS_JSON       = MODEL_DIR / "metrics.json"
 # Hyperparameters were tuned in the notebook; production reads them from here.
 # These are copied from report/models/metrics.json (the notebook winner).
 LOCKED_HYPERPARAMETERS = {
-    "n_estimators":     1532,
+    "n_estimators":     1480,
     "max_depth":        6,
     "learning_rate":    0.05,
     "subsample":        0.8,
