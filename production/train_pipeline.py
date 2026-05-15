@@ -153,12 +153,23 @@ def transform(df, preprocessor):
 # ============================================================
 
 def compute_metrics(y_true, y_pred, label):
-    """Returns dict with RMSE (AUD), MAPE, R²."""
+    """Compute RMSE and MAPE on AUD scale; R² on log scale to match the ML notebook.
+
+    The ML notebook uses log1p(price) as the target and reports R² on the log
+    scale because that is the scale the model optimizes against. Computing R²
+    on AUD makes it look ~0.05 lower due to luxury-home variance dominating
+    the residual sum of squares, even though the model is the same.
+    """
     from sklearn.metrics import mean_squared_error, r2_score
 
+    # AUD-scale metrics for interpretability.
     rmse = float(np.sqrt(mean_squared_error(y_true, y_pred)))
     mape = float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100)
-    r2   = float(r2_score(y_true, y_pred))
+
+    # R² on log scale (matches notebook).
+    y_true_log = np.log1p(y_true)
+    y_pred_log = np.log1p(y_pred)
+    r2 = float(r2_score(y_true_log, y_pred_log))
 
     log.info(f"[{label}] RMSE ${rmse:,.0f}  MAPE {mape:.2f}%  R² {r2:.3f}")
     return {"rmse_aud": rmse, "mape": mape, "r2": r2}
