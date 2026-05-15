@@ -27,7 +27,7 @@ jobs:
   scrape:
     name: 1 - Scrape domain.com.au (daily batch)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 300
 
     env:
       HEADLESS: "true"

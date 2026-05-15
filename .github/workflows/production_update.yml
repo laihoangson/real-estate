@@ -1,16 +1,11 @@
 name: Production Update
 
 on:
-#  schedule:
-    # 9:00 AM Melbourne time every Sunday.
-    # Melbourne is UTC+10 (AEST, standard time) or UTC+11 (AEDT, daylight saving).
-    # GitHub Actions cron uses UTC, so we run two cron entries to cover both:
-    #   - 22:00 UTC Saturday = 09:00 AEDT Sunday (Oct-Apr, DST in effect)
-    #   - 23:00 UTC Saturday = 09:00 AEST Sunday (Apr-Oct, standard time)
-    # Each script run is idempotent, but we use a guard inside the job to ensure
-    # only one of the two triggers actually executes per Sunday.
- #   - cron: '0 22 * * 6'
- #   - cron: '0 23 * * 6'
+  schedule:
+    # Sunday 20:00 UTC = Monday 06:00-07:00 Melbourne (AEST/AEDT).
+    # This runs AFTER the daily scrape (14:00 UTC) and enrich (Sunday only) finish,
+    # ensuring the model trains on the latest data.
+    - cron: '0 20 * * 0'
   workflow_dispatch:    # allow manual trigger from the Actions tab
 
 jobs:
@@ -19,53 +14,34 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      - name: Check Melbourne time gate
-        id: time_gate
-        run: |
-          MEL_HOUR=$(TZ='Australia/Melbourne' date +%H)
-          MEL_DOW=$(TZ='Australia/Melbourne' date +%u)   # 1=Mon ... 7=Sun
-          echo "Melbourne time: $(TZ='Australia/Melbourne' date)"
-          echo "Hour: $MEL_HOUR | Day-of-week: $MEL_DOW"
-          # Only proceed if Melbourne is Sunday (7) and hour is 9.
-          if [ "$MEL_DOW" = "7" ] && [ "$MEL_HOUR" = "09" ]; then
-            echo "proceed=true"  >> "$GITHUB_OUTPUT"
-          else
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping: not 9 AM Sunday Melbourne time."
-          fi
-
       - name: Checkout repository
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/checkout@v4
 
       - name: Set up Python
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
 
       - name: Install dependencies
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: Verify input CSV exists
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           if [ ! -f "data/melbourne_price_data_enriched.csv" ]; then
             echo "::error::Input CSV not found at data/melbourne_price_data_enriched.csv"
             exit 1
           fi
           echo "Input CSV size: $(du -h data/melbourne_price_data_enriched.csv | cut -f1)"
+          echo "Latest Last_Updated in input:"
+          python -c "import pandas as pd; df = pd.read_csv('data/melbourne_price_data_enriched.csv'); print(df['Last_Updated'].max())"
 
       - name: Run update pipeline
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: python production/production_update.py
 
       - name: Show metrics summary
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           if [ -f "production/output/models/metrics.json" ]; then
             echo "=== Metrics summary ==="
@@ -73,18 +49,19 @@ jobs:
           fi
 
       - name: Commit and push updated outputs
-        if: steps.time_gate.outputs.proceed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name  "laihoangson"
           git config user.email "lson21757@gmail.com"
           git add production/output/cleaned_data.parquet \
                   production/output/eda_decisions.json \
                   production/output/predictions_for_sale.parquet \
+                  production/output/predictions_for_sale.csv \
                   production/output/models/
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
             git commit -m "Production update: $(TZ='Australia/Melbourne' date +'%Y-%m-%d %H:%M %Z')"
+            git pull origin main --rebase || true
             git push
           fi
 
