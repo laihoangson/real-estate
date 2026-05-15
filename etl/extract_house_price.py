@@ -1,23 +1,27 @@
 """
-Domain.com.au scraper — v4 (session rotation)
+Domain.com.au scraper — v5 (twice-daily small batches)
 
 Strategy:
-- 28 cells per run, 7 cell groups (rotate over 7 days)
-- Restart browser session every 4 cells → 7 sessions per run
-- Each session: new fingerprint (OS, viewport), fresh Akamai cookies
-- First session: full 3-step warm-up
-- Subsequent sessions: light 1-step warm-up (homepage only)
-- 30-60s cool-off between sessions
+- 7 cells per run × 2 runs/day = 14 cells/day
+- 14-day full coverage (ROTATION_STRIDE = 14)
+- 2 runs scheduled 12 hours apart to spread Akamai load
+- RUN_SLOT (A or B) splits each day's 14 cells into two halves
 
-Why rotate sessions?
-After ~5-6 cells in the same session, Akamai's _abck cookie accumulates
-"suspicion score" and starts blocking. A new session = fresh trust.
+Why smaller batches?
+After ~5 cells in a session, Akamai's _abck cookie accumulates suspicion and
+blocks subsequent requests — even with session rotation, because the block is
+on IP not session. Smaller runs spread further apart give IP reputation time
+to cool down.
+
+Schedule (set via cron in scrape.yml):
+  Run A: 02:00 UTC daily (~12:00 Melbourne)  → RUN_SLOT=A
+  Run B: 14:00 UTC daily (~00:00 Melbourne)  → RUN_SLOT=B
 
 Manual env vars:
-  MANUAL_OFFSET=5         → use group 5
-  MANUAL_OFFSET=random    → random group 0-6
-  CELLS_PER_RUN=5         → limit cells for testing
-  CELLS_PER_SESSION=3     → smaller batches (more sessions)
+  MANUAL_OFFSET=5         → use group 5 (0-13)
+  MANUAL_OFFSET=random    → random group
+  RUN_SLOT=A or B         → which half of the 14-cell slice
+  CELLS_PER_RUN=5         → override count for testing
 """
 
 import os
@@ -33,7 +37,7 @@ import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-print("STARTING SCRAPER (v4 — session rotation)")
+print("STARTING SCRAPER (v5 — twice-daily small batches)")
 
 # ==========================================
 # CONFIGURATION
@@ -48,14 +52,19 @@ PROXY_URL = os.getenv('PROXY_URL')
 
 NAV_TIMEOUT_MS = 45_000
 
-CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '28'))
-ROTATION_STRIDE = 7
+# Daily slice math: 14 cells/day × 14 days = 196 total
+CELLS_PER_DAY = 14
+ROTATION_STRIDE = 14
 
-# Session rotation
-CELLS_PER_SESSION = int(os.getenv('CELLS_PER_SESSION', '4'))   # restart every 4 cells
-SESSION_COOLDOWN = (30.0, 60.0)                                 # rest between sessions
+# Per-run config
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))   # half of daily slice
+RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()           # 'A' (first half) or 'B' (second half)
 
-# Pacing within a session
+# Session — keep small to minimize Akamai exposure
+CELLS_PER_SESSION = 3
+SESSION_COOLDOWN = (60.0, 120.0)
+
+# Pacing
 DELAY_BETWEEN_REQUESTS = (10.0, 22.0)
 PAGES_BEFORE_REST = 10
 REST_DURATION = (90.0, 180.0)
@@ -67,8 +76,8 @@ DEEP_PAGE_ABANDON_PROB = 0.3
 # Cell strike budget
 CELL_MAX_STRIKES = 2
 
-# Stop entire run if too many blocks across sessions
-MAX_CONSECUTIVE_BLOCKS = 4   # raised from 3 — give more chances since we restart
+# Stop entire run if blocks pile up
+MAX_CONSECUTIVE_BLOCKS = 3
 
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
@@ -307,7 +316,6 @@ def make_camoufox_kwargs():
 
 
 def warm_up_full(page):
-    """Full 3-step warm-up for FIRST session."""
     print("   🌐 Warm-up step 1: homepage...")
     try:
         page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
@@ -361,7 +369,6 @@ def warm_up_full(page):
 
 
 def warm_up_light(page):
-    """Light 1-step warm-up for SUBSEQUENT sessions."""
     print("   🌐 Light warm-up: homepage only")
     try:
         page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
@@ -370,7 +377,7 @@ def warm_up_light(page):
         except PlaywrightTimeout:
             pass
         if is_access_denied(page):
-            print("   ❌ Homepage blocked in light warm-up.")
+            print("   ❌ Homepage blocked.")
             return False
         simulate_human_behavior(page)
         human_delay(2.0, 4.0)
@@ -385,10 +392,16 @@ def warm_up_light(page):
 
 
 def select_cells_for_today(all_cells):
+    """
+    Pick cells based on:
+      - offset (which group of 14 cells this day is responsible for)
+      - RUN_SLOT (A = first 7 cells, B = second 7 cells)
+    """
     manual_offset = os.getenv('MANUAL_OFFSET', '').strip()
+
     if manual_offset.isdigit():
         offset = int(manual_offset) % ROTATION_STRIDE
-        print(f"   🎯 Manual override: using offset {offset}")
+        print(f"   🎯 Manual override: offset {offset}")
     elif manual_offset.lower() == 'random':
         offset = random.randint(0, ROTATION_STRIDE - 1)
         print(f"   🎲 Random offset: {offset}")
@@ -397,16 +410,42 @@ def select_cells_for_today(all_cells):
         offset = today.toordinal() % ROTATION_STRIDE
         print(f"   📅 Auto offset {offset} for {today}")
 
-    selected = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
-    random.shuffle(selected)
-    selected = selected[:CELLS_PER_RUN]
+    # Get all 14 cells for today
+    all_today = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
+
+    # Deterministic shuffle based on offset (so slot A and B always split same way)
+    rng = random.Random(offset)
+    rng.shuffle(all_today)
+
+    # Split into A (first half) and B (second half)
+    half = len(all_today) // 2
+    slot_a = all_today[:half]
+    slot_b = all_today[half:]
+
+    print(f"   📦 Slot A: {sorted([idx for idx, _ in slot_a])}")
+    print(f"   📦 Slot B: {sorted([idx for idx, _ in slot_b])}")
+
+    if RUN_SLOT == 'A':
+        selected = slot_a
+        print(f"   🅰️ This run is SLOT A — {len(selected)} cells")
+    elif RUN_SLOT == 'B':
+        selected = slot_b
+        print(f"   🅱️ This run is SLOT B — {len(selected)} cells")
+    else:
+        # Fallback if RUN_SLOT is invalid: use all 14
+        selected = all_today
+        print(f"   ⚠️ RUN_SLOT='{RUN_SLOT}' invalid — using all 14 cells")
+
+    # Cap at CELLS_PER_RUN
+    if len(selected) > CELLS_PER_RUN:
+        selected = selected[:CELLS_PER_RUN]
+
     cell_ids = sorted([idx for idx, _ in selected])
-    print(f"   🗺️  Cells to scrape: {cell_ids}")
+    print(f"   🗺️  Final cells to scrape: {cell_ids}")
     return selected
 
 
 def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
-    """Scrape one cell. Returns (records_count, was_blocked, updated_pages_in_session)."""
     t_lat, b_lat, l_lng, r_lng = cell
     print(f"\n📍 cell #{cell_idx_global} | {t_lat},{l_lng} → {b_lat},{r_lng}")
 
@@ -467,9 +506,6 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
     return cell_records, was_blocked, pages_in_session
 
 
-# ==========================================
-# MAIN
-# ==========================================
 def main():
     # Load dedup state
     seen_records = {}
@@ -500,29 +536,31 @@ def main():
 
     todays_cells = select_cells_for_today(all_cells)
     total_today = len(todays_cells)
-    num_sessions = math.ceil(total_today / CELLS_PER_SESSION)
-    print(f"   📊 Today's slice: {total_today} cells out of {len(all_cells)} total")
-    print(f"   🔄 Rotation: {CELLS_PER_SESSION} cells/session → {num_sessions} sessions total")
+    num_sessions = math.ceil(total_today / CELLS_PER_SESSION) if total_today > 0 else 0
+    print(f"   📊 This run: {total_today} cells, {num_sessions} sessions")
 
     if PROXY_URL:
         print(f"   🛡️ Proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
     else:
         print("   ⚠️  No proxy")
 
+    if total_today == 0:
+        print("\n⚠️ No cells to scrape this run.")
+        return
+
     total_records = 0
     cells_done = 0
     consecutive_blocks = 0
     session_idx = 0
-    cell_pos = 0      # current position in todays_cells
+    cell_pos = 0
 
     while cell_pos < total_today:
         if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
             print(f"\n🛑 {consecutive_blocks} blocked cells in a row — stopping run")
-            print(f"   Saving partial data. Try again tomorrow.")
+            print(f"   Saving partial data. Try again later.")
             break
 
         session_idx += 1
-        # Cells for this session
         session_end = min(cell_pos + CELLS_PER_SESSION, total_today)
         session_cells = todays_cells[cell_pos:session_end]
 
@@ -534,12 +572,11 @@ def main():
             with Camoufox(**make_camoufox_kwargs()) as browser:
                 page = browser.new_page()
 
-                # Warm-up: full for first session, light for subsequent
                 warm_up_ok = warm_up_full(page) if session_idx == 1 else warm_up_light(page)
                 if not warm_up_ok:
                     print(f"   ❌ Warm-up failed for session {session_idx}")
                     consecutive_blocks += 1
-                    cell_pos = session_end   # skip these cells, try next session
+                    cell_pos = session_end
                     continue
 
                 human_delay(3.0, 6.0)
@@ -564,7 +601,7 @@ def main():
                         consecutive_blocks += 1
                         print(f"   🚫 Cell blocked (run streak: {consecutive_blocks})")
                     else:
-                        consecutive_blocks = 0   # genuinely empty cell
+                        consecutive_blocks = 0
 
                     cell_pos += 1
 
@@ -572,17 +609,15 @@ def main():
 
         except Exception as e:
             print(f"   ❌ Session exception: {e}")
-            cell_pos = session_end   # move on to avoid infinite loop
+            cell_pos = session_end
 
-        # Cool-off between sessions (skip after last session)
         if cell_pos < total_today and consecutive_blocks < MAX_CONSECUTIVE_BLOCKS:
             cooldown = random.uniform(*SESSION_COOLDOWN)
             print(f"\n   ⏰ Cooldown {cooldown:.0f}s before next session...")
             time.sleep(cooldown)
 
-    # Final report
     print(f"\n{'='*60}")
-    print("✅ DONE")
+    print(f"✅ DONE — Run slot {RUN_SLOT}")
     print(f"{'='*60}")
     print(f"   Sessions used:  {session_idx}")
     print(f"   Cells done:     {cells_done}/{total_today}")
