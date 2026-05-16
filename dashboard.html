@@ -401,7 +401,7 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
         <div class="callout violet">
             <div class="callout-title">About the model</div>
             <div class="callout-body">
-                <p>Prices come from an <b>XGBoost</b> regression model trained on <b>114,594 Sold transactions</b> (2005–2026) using a time-based 70/15/15 split, with locked hyperparameters from the ML report.</p>
+                <p>Prices come from an <b>XGBoost</b> regression model trained on <b>Sold transactions</b> (2005–2026) using a time-based 70/15/15 split, with locked hyperparameters from the ML report.</p>
                 <p>The model uses 34 features: property attributes (beds, baths, land size), location (suburb, distance to CBD, train), and area demographics (income, age, population, crime). At inference, current Year and Month are injected so predictions reflect today's market level.</p>
                 <div style="margin-top: 8px;">
                     <span class="metric-pill">Test MAPE <b id="mlMape">11.83%</b></span>
