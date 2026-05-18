@@ -7,8 +7,10 @@ on:
   schedule:
     # Run A: 02:00 UTC daily = ~12:00-13:00 Melbourne (noon)
     - cron: "0 2 * * *"
+
     # Run B: 14:00 UTC daily = ~00:00-01:00 Melbourne (midnight)
     - cron: "0 14 * * *"
+
   workflow_dispatch:
     inputs:
       offset:
@@ -16,6 +18,7 @@ on:
         required: false
         default: ''
         type: string
+
       run_slot:
         description: 'Run slot: A (first 7) or B (second 7)'
         required: false
@@ -24,6 +27,7 @@ on:
         options:
           - A
           - B
+
       cells_per_run:
         description: 'Number of cells to scrape'
         required: false
@@ -31,10 +35,11 @@ on:
         type: string
 
 env:
-  SCRAPE_FILE:  data/melbourne_price_data.csv
-  ENRICH_FILE:  data/melbourne_price_data_enriched.csv
+  SCRAPE_FILE: data/melbourne_price_data.csv
+  ENRICH_FILE: data/melbourne_price_data_enriched.csv
 
 jobs:
+
   # ──────────────────────────────────────────────
   # JOB 1: Twice-daily small batch scrape
   # ──────────────────────────────────────────────
@@ -48,9 +53,10 @@ jobs:
       PROXY_URL: ${{ secrets.PROXY_URL }}
       CELLS_PER_RUN: ${{ inputs.cells_per_run || '7' }}
       MANUAL_OFFSET: ${{ inputs.offset || '' }}
-      # Determine RUN_SLOT from cron schedule (02:00 UTC = A, 14:00 UTC = B)
-      # Manual trigger uses input value
+
+      # Auto-detect run slot from cron schedule
       RUN_SLOT: ${{ inputs.run_slot || (github.event.schedule == '0 2 * * *' && 'A' || 'B') }}
+
       DISPLAY: ":99"
 
     steps:
@@ -63,6 +69,8 @@ jobs:
           echo "🕐 Time (UTC): $(date -u +%H:%M)"
           echo "🅰️/🅱️ Run Slot: ${{ env.RUN_SLOT }}"
           echo "📦 Cells per run: ${{ env.CELLS_PER_RUN }}"
+          echo "📌 Event name: ${{ github.event_name }}"
+          echo "📌 Schedule: ${{ github.event.schedule }}"
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
@@ -107,13 +115,18 @@ jobs:
         run: |
           git config --global user.name "laihoangson"
           git config --global user.email "lson21757@gmail.com"
+
           git add ${{ env.SCRAPE_FILE }}
-          git diff --cached --quiet || git commit -m "Scrape slot ${{ env.RUN_SLOT }} - $(date -u +%Y-%m-%d_%H%M) [skip ci]"
+
+          git diff --cached --quiet || \
+            git commit -m "Scrape slot ${{ env.RUN_SLOT }} - $(date -u +%Y-%m-%d_%H%M) [skip ci]"
+
           git pull origin main --rebase || true
           git push || true
 
   # ──────────────────────────────────────────────
-  # JOB 2: Enrich — chỉ chạy Run B (đêm, sau khi đã có data cả ngày)
+  # JOB 2: Weekly enrich
+  # Only runs on Sunday Run B OR manual dispatch
   # ──────────────────────────────────────────────
   enrich:
     name: 2 - Enrich
@@ -131,22 +144,34 @@ jobs:
       - name: Decide if enrich should run
         id: check
         run: |
-          # Run enrich on:
-          # - Sunday Run B (14:00 UTC) for weekly fresh enrich
-          # - Manual trigger
-          DOW=$(date -u +%u)
-          HOUR=$(date -u +%H)
-          IS_SUNDAY_NIGHT="false"
-          if [ "$DOW" = "7" ] && [ "$HOUR" = "14" ]; then
-            IS_SUNDAY_NIGHT="true"
+
+          echo "📌 Event name: ${{ github.event_name }}"
+          echo "📌 Schedule: ${{ github.event.schedule }}"
+
+          SHOULD_RUN="false"
+
+          # Manual dispatch always allowed
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RUN="true"
           fi
 
-          if [ "$IS_SUNDAY_NIGHT" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "should_run=true" >> $GITHUB_OUTPUT
+          # Sunday midnight cron (Run B)
+          if [ "${{ github.event.schedule }}" = "0 14 * * *" ]; then
+
+            # Check if today UTC is Sunday
+            DOW=$(date -u +%u)
+
+            if [ "$DOW" = "7" ]; then
+              SHOULD_RUN="true"
+            fi
+          fi
+
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+
+          if [ "$SHOULD_RUN" = "true" ]; then
             echo "✅ Will run enrich"
           else
-            echo "should_run=false" >> $GITHUB_OUTPUT
-            echo "⏭️  Skipping enrich (only Sunday night or manual)"
+            echo "⏭️ Skipping enrich"
           fi
 
       - name: Setup Python 3.11
@@ -157,7 +182,8 @@ jobs:
 
       - name: Install enrich dependencies
         if: steps.check.outputs.should_run == 'true'
-        run: pip install pandas requests openpyxl tqdm
+        run: |
+          pip install pandas requests openpyxl tqdm
 
       - name: Run enrichment
         if: steps.check.outputs.should_run == 'true'
@@ -171,7 +197,11 @@ jobs:
         run: |
           git config --global user.name "laihoangson"
           git config --global user.email "lson21757@gmail.com"
+
           git add ${{ env.ENRICH_FILE }}
-          git diff --cached --quiet || git commit -m "Enrich weekly - $(date -u +%Y-%m-%d) [skip ci]"
+
+          git diff --cached --quiet || \
+            git commit -m "Enrich weekly - $(date -u +%Y-%m-%d) [skip ci]"
+
           git pull origin main --rebase || true
           git push || true
