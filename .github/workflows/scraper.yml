@@ -46,7 +46,7 @@ jobs:
   scrape:
     name: 1 - Scrape (7 cells)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 300
 
     env:
       HEADLESS: "true"
