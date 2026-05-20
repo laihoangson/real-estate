@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       offset:
-        description: 'Cell group (0-19). Leave empty for auto, or "random"'
+        description: 'Cell group (0-13). Leave empty for auto, or "random"'
         required: false
         default: ''
         type: string
@@ -31,7 +31,7 @@ on:
       cells_per_run:
         description: 'Number of cells to scrape'
         required: false
-        default: '5'
+        default: '7'
         type: string
 
 env:
@@ -44,14 +44,14 @@ jobs:
   # JOB 1: Twice-daily small batch scrape
   # ──────────────────────────────────────────────
   scrape:
-    name: 1 - Scrape (5 cells, deeper)
+    name: 1 - Scrape (7 cells, 10 pages each)
     runs-on: ubuntu-latest
     timeout-minutes: 300
 
     env:
       HEADLESS: "true"
       PROXY_URL: ${{ secrets.PROXY_URL }}
-      CELLS_PER_RUN: ${{ inputs.cells_per_run || '5' }}
+      CELLS_PER_RUN: ${{ inputs.cells_per_run || '7' }}
       MANUAL_OFFSET: ${{ inputs.offset || '' }}
 
       # Auto-detect run slot from cron schedule

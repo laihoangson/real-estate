@@ -1,27 +1,30 @@
 """
-Domain.com.au scraper — v5 (twice-daily small batches)
+Domain.com.au scraper — v5.2 (faster, lighter to avoid Akamai block)
+
+Changes from v5.1:
+- MAX_PAGES_PER_QUERY: 25 → 10 (less pages → less Akamai exposure → faster)
+- CELLS_PER_RUN: 5 → 7 (more cells, but each shallower)
+- CELLS_PER_SESSION: 2 → 3 (more cells per session)
+- ROTATION_STRIDE: 20 → 14 (full grid coverage in 14 days)
+- CELLS_PER_DAY: 10 → 14
+- Graduated abandon retained: 0% for pg 1-5, then grows from pg 6
+- Counter fix retained: cells_done counts empty regions too
 
 Strategy:
 - 7 cells per run × 2 runs/day = 14 cells/day
 - 14-day full coverage (ROTATION_STRIDE = 14)
-- 2 runs scheduled 12 hours apart to spread Akamai load
-- RUN_SLOT (A or B) splits each day's 14 cells into two halves
-
-Why smaller batches?
-After ~5 cells in a session, Akamai's _abck cookie accumulates suspicion and
-blocks subsequent requests — even with session rotation, because the block is
-on IP not session. Smaller runs spread further apart give IP reputation time
-to cool down.
+- Each cell scrapes max 10 pages (~200-250 listings)
+- Total per run: ~1,400-1,750 records (mid-ground between v5 and v5.1)
 
 Schedule (set via cron in scrape.yml):
-  Run A: 02:00 UTC daily (~12:00 Melbourne)  → RUN_SLOT=A
-  Run B: 14:00 UTC daily (~00:00 Melbourne)  → RUN_SLOT=B
+  Run A: 02:00 UTC daily  → RUN_SLOT=A
+  Run B: 14:00 UTC daily  → RUN_SLOT=B
 
 Manual env vars:
   MANUAL_OFFSET=5         → use group 5 (0-13)
   MANUAL_OFFSET=random    → random group
-  RUN_SLOT=A or B         → which half of the 14-cell slice
-  CELLS_PER_RUN=5         → override count for testing
+  RUN_SLOT=A or B         → which half of the daily cell slice
+  CELLS_PER_RUN=7         → override count for testing
 """
 
 import os
@@ -37,7 +40,7 @@ import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-print("STARTING SCRAPER (v5 — twice-daily small batches)")
+print("STARTING SCRAPER (v5.2 — 10 pages × 7 cells × twice daily)")
 
 # ==========================================
 # CONFIGURATION
@@ -52,26 +55,30 @@ PROXY_URL = os.getenv('PROXY_URL')
 
 NAV_TIMEOUT_MS = 45_000
 
-# Daily slice math: 14 cells/day × 14 days = 196 total
+# Daily slice math: 14 cells/day × 14 days = 196 (= grid size, perfect)
 CELLS_PER_DAY = 14
 ROTATION_STRIDE = 14
 
 # Per-run config
-CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))   # half of daily slice
-RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()           # 'A' (first half) or 'B' (second half)
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))    # half of daily slice
+RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()           # 'A' or 'B'
 
-# Session — keep small to minimize Akamai exposure
+# Session
 CELLS_PER_SESSION = 3
 SESSION_COOLDOWN = (60.0, 120.0)
 
 # Pacing
-DELAY_BETWEEN_REQUESTS = (10.0, 22.0)
-PAGES_BEFORE_REST = 10
-REST_DURATION = (90.0, 180.0)
+DELAY_BETWEEN_REQUESTS = (12.0, 25.0)
+PAGES_BEFORE_REST = 8
+REST_DURATION = (100.0, 200.0)
 
-# Pages per query
-MAX_PAGES_PER_QUERY = 5
-DEEP_PAGE_ABANDON_PROB = 0.3
+# Pages per query — v5.2: 10 pages per cell
+MAX_PAGES_PER_QUERY = 10
+# Graduated abandon: starts at page 6, grows ~3%/page, capped at 25%
+ABANDON_START_PAGE = 6
+ABANDON_BASE_PROB = 0.05
+ABANDON_GROWTH = 0.03
+ABANDON_MAX_PROB = 0.25
 
 # Cell strike budget
 CELL_MAX_STRIKES = 2
@@ -395,7 +402,7 @@ def select_cells_for_today(all_cells):
     """
     Pick cells based on:
       - offset (which group of 14 cells this day is responsible for)
-      - RUN_SLOT (A = first 7 cells, B = second 7 cells)
+      - RUN_SLOT (A = first half, B = second half)
     """
     manual_offset = os.getenv('MANUAL_OFFSET', '').strip()
 
@@ -410,7 +417,7 @@ def select_cells_for_today(all_cells):
         offset = today.toordinal() % ROTATION_STRIDE
         print(f"   📅 Auto offset {offset} for {today}")
 
-    # Get all 14 cells for today
+    # Get all cells assigned to today's offset
     all_today = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
 
     # Deterministic shuffle based on offset (so slot A and B always split same way)
@@ -432,9 +439,8 @@ def select_cells_for_today(all_cells):
         selected = slot_b
         print(f"   🅱️ This run is SLOT B — {len(selected)} cells")
     else:
-        # Fallback if RUN_SLOT is invalid: use all 14
         selected = all_today
-        print(f"   ⚠️ RUN_SLOT='{RUN_SLOT}' invalid — using all 14 cells")
+        print(f"   ⚠️ RUN_SLOT='{RUN_SLOT}' invalid — using all cells")
 
     # Cap at CELLS_PER_RUN
     if len(selected) > CELLS_PER_RUN:
@@ -467,9 +473,16 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
             if cell_strikes >= CELL_MAX_STRIKES:
                 break
 
-            if pg >= 4 and random.random() < DEEP_PAGE_ABANDON_PROB:
-                print(f"   🚪 Stopping at page {pg} (human-like abandon)")
-                break
+            # Graduated abandon: 0% for pg 1-5, then grows from 5% at pg 6
+            # by 3% per page, capped at 25%.
+            if pg >= ABANDON_START_PAGE:
+                abandon_prob = min(
+                    ABANDON_BASE_PROB + (pg - ABANDON_START_PAGE) * ABANDON_GROWTH,
+                    ABANDON_MAX_PROB
+                )
+                if random.random() < abandon_prob:
+                    print(f"   🚪 Stopping at page {pg} (human-like abandon, p={abandon_prob:.2f})")
+                    break
 
             if pages_in_session >= PAGES_BEFORE_REST:
                 rest = random.uniform(*REST_DURATION)
@@ -550,6 +563,8 @@ def main():
 
     total_records = 0
     cells_done = 0
+    cells_empty = 0
+    cells_blocked = 0
     consecutive_blocks = 0
     session_idx = 0
     cell_pos = 0
@@ -593,14 +608,20 @@ def main():
                     )
 
                     if cell_records > 0:
+                        # Cell had data
                         session_records += cell_records
                         total_records += cell_records
                         cells_done += 1
                         consecutive_blocks = 0
                     elif was_blocked:
+                        # Cell was blocked by Akamai
+                        cells_blocked += 1
                         consecutive_blocks += 1
                         print(f"   🚫 Cell blocked (run streak: {consecutive_blocks})")
                     else:
+                        # Cell completed but had no listings (empty region)
+                        cells_done += 1
+                        cells_empty += 1
                         consecutive_blocks = 0
 
                     cell_pos += 1
@@ -620,7 +641,10 @@ def main():
     print(f"✅ DONE — Run slot {RUN_SLOT}")
     print(f"{'='*60}")
     print(f"   Sessions used:  {session_idx}")
-    print(f"   Cells done:     {cells_done}/{total_today}")
+    print(f"   Cells done:     {cells_done}/{total_today}  "
+          f"({cells_done - cells_empty} with data, {cells_empty} empty)")
+    if cells_blocked > 0:
+        print(f"   Cells blocked:  {cells_blocked}")
     print(f"   New records:    {total_records}")
 
     if total_records == 0 and consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
