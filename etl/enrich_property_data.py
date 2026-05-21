@@ -106,6 +106,22 @@ def should_stop():
     """True if approaching timeout (less than 60s remaining)."""
     return time_remaining() < 60
 
+
+def interruptible_sleep(seconds, label=""):
+    """Sleep in 5-second chunks; abort early if timeout approaches.
+
+    This prevents the script from sleeping past the workflow timeout
+    during long cooldowns/rests/delays.
+    """
+    end = time.time() + seconds
+    while time.time() < end:
+        if should_stop():
+            print(f"   ⏰ Interrupting sleep ({label}) — timeout approaching")
+            return
+        chunk = min(5.0, end - time.time())
+        if chunk > 0:
+            time.sleep(chunk)
+
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
     'fitzroy-vic-3065', 'south-yarra-vic-3141', 'carlton-vic-3053',
@@ -171,7 +187,7 @@ def calculate_distance_to_cbd(lat2, lon2):
 
 
 def human_delay(min_sec, max_sec):
-    time.sleep(random.uniform(min_sec, max_sec))
+    interruptible_sleep(random.uniform(min_sec, max_sec), "human delay")
 
 
 def save_incremental_data(new_data_list, file_path):
@@ -512,7 +528,7 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
             if pages_in_session >= PAGES_BEFORE_REST:
                 rest = random.uniform(*REST_DURATION)
                 print(f"   ☕ Rest {rest:.0f}s")
-                time.sleep(rest)
+                interruptible_sleep(rest, "rest")
                 pages_in_session = 0
             elif pg > 1:
                 human_delay(*DELAY_BETWEEN_REQUESTS)
@@ -667,7 +683,7 @@ def main():
         if cell_pos < total_today and consecutive_blocks < MAX_CONSECUTIVE_BLOCKS:
             cooldown = random.uniform(*SESSION_COOLDOWN)
             print(f"\n   ⏰ Cooldown {cooldown:.0f}s before next session...")
-            time.sleep(cooldown)
+            interruptible_sleep(cooldown, "session cooldown")
 
     print(f"\n{'='*60}")
     print(f"✅ DONE — Run slot {RUN_SLOT}")
