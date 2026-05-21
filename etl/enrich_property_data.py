@@ -1,506 +1,692 @@
 """
-enrich_melbourne_data.py
-========================
-Enriches the Melbourne property dataset with:
-  1. ABS Census 2021 — median income, population, median age by postcode
-  2. Victoria Crime Statistics — offence count + rate by postcode
-  3. PTV GTFS — distance to nearest train station (lat/lon)
+Domain.com.au scraper — v5.2 (faster, lighter to avoid Akamai block)
 
-Run:
-    python enrich_melbourne_data.py \
-        --input  data/melbourne_price_data.csv \
-        --output data/melbourne_price_data_enriched.csv
+Changes from v5.1:
+- MAX_PAGES_PER_QUERY: 25 → 10 (less pages → less Akamai exposure → faster)
+- CELLS_PER_RUN: 5 → 7 (more cells, but each shallower)
+- CELLS_PER_SESSION: 2 → 3 (more cells per session)
+- ROTATION_STRIDE: 20 → 14 (full grid coverage in 14 days)
+- CELLS_PER_DAY: 10 → 14
+- Graduated abandon retained: 0% for pg 1-5, then grows from pg 6
+- Counter fix retained: cells_done counts empty regions too
 
-    # If C: drive is full, put cache on another drive:
-    python enrich_melbourne_data.py --cache-dir "D:\\.cache_enrich"
+Strategy:
+- 7 cells per run × 2 runs/day = 14 cells/day
+- 14-day full coverage (ROTATION_STRIDE = 14)
+- Each cell scrapes max 10 pages (~200-250 listings)
+- Total per run: ~1,400-1,750 records (mid-ground between v5 and v5.1)
 
-Safe to rerun: caches downloads for 6 days.
-Delete .cache_enrich/ to force a full re-download.
+Schedule (set via cron in scrape.yml):
+  Run A: 02:00 UTC daily  → RUN_SLOT=A
+  Run B: 14:00 UTC daily  → RUN_SLOT=B
 
-Dependencies (add to requirements.txt):
-    pandas requests openpyxl tqdm
+Manual env vars:
+  MANUAL_OFFSET=5         → use group 5 (0-13)
+  MANUAL_OFFSET=random    → random group
+  RUN_SLOT=A or B         → which half of the daily cell slice
+  CELLS_PER_RUN=7         → override count for testing
 """
 
-import argparse
-import io
-import math
-import re
+import os
+import sys
+import json
 import time
-import zipfile
-from datetime import datetime
-from pathlib import Path
-
-import numpy as np
+import math
+import random
+import re
+import datetime as dt
 import pandas as pd
-import requests
+import numpy as np
+from camoufox.sync_api import Camoufox
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
-try:
-    from tqdm import tqdm
-    TQDM = True
-except ImportError:
-    TQDM = False
+print("STARTING SCRAPER (v5.2 — 10 pages × 7 cells × twice daily)")
 
+# ==========================================
+# CONFIGURATION
+# ==========================================
+FILE_NAME = 'data/melbourne_price_data.csv'
+GRID_SIZE = 14
+LAT_NORTH, LAT_SOUTH = -37.5, -38.5
+LNG_WEST, LNG_EAST = 144.35, 145.40
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CONSTANTS  (CACHE_DIR is overridden in main() via --cache-dir)
-# ══════════════════════════════════════════════════════════════════════════════
+HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'
+PROXY_URL = os.getenv('PROXY_URL')
 
-CACHE_DIR = Path(".cache_enrich")
+NAV_TIMEOUT_MS = 45_000
 
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-}
+# Daily slice math: 14 cells/day × 14 days = 196 (= grid size, perfect)
+CELLS_PER_DAY = 14
+ROTATION_STRIDE = 14
 
-# ABS Census 2021 GCP — Postcode (POA) only for VIC — ~3 MB
-ABS_G02_URL = (
-    "https://www.abs.gov.au/census/find-census-data/datapacks/download/"
-    "2021_GCP_POA_for_VIC_short-header.zip"
-)
+# Per-run config
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))    # half of daily slice
+RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()           # 'A' or 'B'
 
-# Crime Statistics Agency Victoria — LGA Recorded Offences, Year Ending Sep 2024
-# Table 03 inside has: Year, Postcode, Suburb/Town Name, Offence Count
-CRIME_STATS_URL = (
-    "https://files.crimestatistics.vic.gov.au/2025-03/"
-    "Data_Tables_LGA_Recorded_Offences_Year_Ending_September_2024.xlsx"
-)
+# Session
+CELLS_PER_SESSION = 3
+SESSION_COOLDOWN = (60.0, 120.0)
 
-# PTV GTFS static feed — all Melbourne public transport modes
-PTV_GTFS_URL = "https://data.ptv.vic.gov.au/downloads/gtfs.zip"
+# Pacing
+DELAY_BETWEEN_REQUESTS = (12.0, 25.0)
+PAGES_BEFORE_REST = 8
+REST_DURATION = (100.0, 200.0)
 
-CACHE_MAX_DAYS = 6
+# Pages per query — v5.2: 10 pages per cell
+MAX_PAGES_PER_QUERY = 10
+# Graduated abandon: starts at page 6, grows ~3%/page, capped at 25%
+ABANDON_START_PAGE = 6
+ABANDON_BASE_PROB = 0.05
+ABANDON_GROWTH = 0.03
+ABANDON_MAX_PROB = 0.25
 
+# Cell strike budget
+CELL_MAX_STRIKES = 2
 
-# ══════════════════════════════════════════════════════════════════════════════
-# CACHE HELPERS
-# ══════════════════════════════════════════════════════════════════════════════
+# Stop entire run if blocks pile up
+MAX_CONSECUTIVE_BLOCKS = 3
 
-def _cache_path(name):
-    return CACHE_DIR / name
-
-
-def _cache_fresh(name):
-    p = _cache_path(name)
-    if not p.exists():
-        return False
-    age = datetime.now() - datetime.fromtimestamp(p.stat().st_mtime)
-    return age.days < CACHE_MAX_DAYS
-
-
-def _load_cache(name):
-    return _cache_path(name).read_bytes()
+# ==========================================
+# GRACEFUL TIMEOUT (Option 1: no carry-over)
+# ==========================================
+# Stop scraping before GitHub Actions kills the workflow.
+# GitHub Actions limit is 6h per job; we stop 20 min early so the
+# commit/push step has time to finish.
+SCRIPT_START_TIME = time.time()
+RUN_TIMEOUT_SECONDS = 5 * 3600 + 40 * 60   # 5h40m
 
 
-def _download(url, cache_name, timeout=60, retries=3):
-    """Download with caching, retry, and chunk-streaming."""
-    if _cache_fresh(cache_name):
-        print(f"   [cache] {cache_name}")
-        return _load_cache(cache_name)
+def time_remaining():
+    """Seconds left before graceful timeout."""
+    elapsed = time.time() - SCRIPT_START_TIME
+    return max(0, RUN_TIMEOUT_SECONDS - elapsed)
 
-    print(f"   [download] {url}")
-    cache_file = _cache_path(cache_name)
 
-    for attempt in range(retries):
+def should_stop():
+    """True if approaching timeout (less than 60s remaining)."""
+    return time_remaining() < 60
+
+WARMUP_SUBURBS = [
+    'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
+    'fitzroy-vic-3065', 'south-yarra-vic-3141', 'carlton-vic-3053',
+    'footscray-vic-3011', 'brighton-vic-3186', 'hawthorn-vic-3122',
+    'prahran-vic-3181', 'collingwood-vic-3066', 'northcote-vic-3070',
+]
+
+SEARCH_MODES = [
+    ('For Sale', 'sale', 'excludeunderoffer=1'),
+    ('Sold', 'sold-listings', ''),
+]
+
+
+# ==========================================
+# HELPERS
+# ==========================================
+def parse_raw_price(raw_price):
+    if not isinstance(raw_price, str) or not raw_price.strip():
+        return np.nan
+    normalized = raw_price.lower().strip()
+    if '$' not in normalized:
+        return np.nan
+    normalized = re.sub(r'([.,])(\d{4,})', lambda m: m.group(1) + m.group(2)[:3], normalized)
+    normalized = normalized.replace(',', '').replace('–', '-').replace(' to ', '-')
+    matches = re.findall(r'\$\s*(\d+\.?\d*[km]?)', normalized)
+    if not matches:
+        return np.nan
+    parsed_vals = []
+    for val_str in matches:
+        mult = 1
+        if val_str.endswith('m'):
+            mult = 1_000_000
+            val_str = val_str[:-1]
+        elif val_str.endswith('k'):
+            num = float(val_str[:-1])
+            if num < 1000:
+                mult = 1000
+            val_str = val_str[:-1]
         try:
-            r = requests.get(url, headers=HEADERS, timeout=timeout, stream=True)
-            r.raise_for_status()
-            with open(cache_file, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
-            return cache_file.read_bytes()
-        except Exception as e:
-            if cache_file.exists():
-                cache_file.unlink()
-            wait = 5 * (attempt + 1)
-            print(f"   Attempt {attempt+1}/{retries} failed: {e}. Retrying in {wait}s...")
-            time.sleep(wait)
-    raise RuntimeError(f"Failed to download {url} after {retries} attempts")
+            parsed_vals.append(float(val_str) * mult)
+        except ValueError:
+            pass
+    if not parsed_vals:
+        return np.nan
+    if 'fhog' in normalized:
+        return parsed_vals[0]
+    if len(parsed_vals) >= 2 and '-' in normalized:
+        return (parsed_vals[0] + parsed_vals[1]) / 2
+    return parsed_vals[0]
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 1. ABS CENSUS 2021
-# ══════════════════════════════════════════════════════════════════════════════
+def calculate_distance_to_cbd(lat2, lon2):
+    if pd.isna(lat2) or pd.isna(lon2):
+        return np.nan
+    lat1, lon1 = -37.8136, 144.9631
+    R = 6371.0
+    lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
+    lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
+    dlon, dlat = lon2_rad - lon1_rad, lat2_rad - lat1_rad
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return round(R * c, 2)
 
-def load_abs_g02():
-    print("\n[1/3] Loading ABS Census G02 + G01 ...")
+
+def human_delay(min_sec, max_sec):
+    time.sleep(random.uniform(min_sec, max_sec))
+
+
+def save_incremental_data(new_data_list, file_path):
+    if not new_data_list:
+        return
+    df_new = pd.DataFrame(new_data_list)
+    os.makedirs(os.path.dirname(file_path), exist_ok=True)
+    if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
+        try:
+            df_old = pd.read_csv(file_path)
+            df_combined = pd.concat([df_old, df_new], ignore_index=True)
+            df_final = df_combined.drop_duplicates(subset=['Property_ID'], keep='last')
+            suburb_counts = df_final.groupby('Suburb')['Property_ID'].transform('count')
+            df_final['Propertycount'] = suburb_counts
+            df_final.to_csv(file_path, index=False, encoding='utf-8-sig')
+        except pd.errors.EmptyDataError:
+            df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
+    else:
+        df_new['Propertycount'] = df_new.groupby('Suburb')['Property_ID'].transform('count')
+        df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
+
+
+def simulate_human_behavior(page):
     try:
-        raw = _download(ABS_G02_URL, "abs_poa_vic.zip", timeout=300)
+        for _ in range(random.randint(1, 3)):
+            scroll_distance = random.randint(200, 900)
+            page.evaluate(f"window.scrollBy(0, {scroll_distance})")
+            human_delay(0.6, 1.8)
+        if random.random() < 0.4:
+            page.evaluate(f"window.scrollBy(0, -{random.randint(100, 400)})")
+            human_delay(0.4, 1.0)
+    except Exception:
+        pass
 
-        def _read_poa_csv(pattern):
-            with zipfile.ZipFile(io.BytesIO(raw)) as outer:
-                all_files = outer.namelist()
-                matches = [n for n in all_files
-                           if re.search(pattern, n) and 'POA' in n and n.endswith('.csv')]
-                if matches:
-                    with outer.open(matches[0]) as f:
-                        return pd.read_csv(f, dtype=str)
-                poa_zips = [n for n in all_files if 'POA' in n and n.endswith('.zip')]
-                for pz in poa_zips:
-                    with zipfile.ZipFile(io.BytesIO(outer.read(pz))) as inner:
-                        inner_matches = [n for n in inner.namelist()
-                                         if re.search(pattern, n) and n.endswith('.csv')]
-                        if inner_matches:
-                            with inner.open(inner_matches[0]) as f:
-                                return pd.read_csv(f, dtype=str)
-            return None
 
-        df_g02 = _read_poa_csv(r'G02')
-        df_g01 = _read_poa_csv(r'G01')
+def parse_listings_payload(payload, status_label, seen_records):
+    props = payload.get('props', {}).get('pageProps', {}).get('componentProps', {})
+    listings = props.get('listingsMap', {})
+    total_pages = props.get('totalPages', 1)
+    records = []
 
-        if df_g02 is None:
-            print("   WARNING: G02 CSV not found in ABS zip - skipping ABS.")
-            return pd.DataFrame()
+    for pid, item in listings.items():
+        pid_str = str(pid)
+        m = item.get('listingModel', {})
+        raw_price = str(m.get('price', 'N/A'))
 
-        print(f"   G02 columns: {df_g02.columns.tolist()[:10]}")
+        if pid_str in seen_records:
+            old = seen_records[pid_str]
+            if old['Status'] == status_label and old['Price'] == raw_price:
+                continue
 
-        g02_map = {}
-        for c in df_g02.columns:
-            cl = c.lower()
-            if cl.startswith('poa_code') or cl == 'region_id':
-                g02_map[c] = '_postcode_raw'
-            elif cl in ('median_tot_prsnl_inc_weekly', 'med_tot_prsnl_inc_wk'):
-                g02_map[c] = 'abs_median_income_weekly'
-            elif 'median' in cl and ('prsnl' in cl or 'personal' in cl) and 'inc' in cl:
-                g02_map[c] = 'abs_median_income_weekly'
-            elif cl in ('median_age_persons', 'med_age_persons'):
-                g02_map[c] = 'abs_median_age'
-            elif 'median' in cl and 'age' in cl:
-                g02_map[c] = 'abs_median_age'
+        a = m.get('address', {})
+        f = m.get('features', {})
+        street = a.get('street', 'N/A')
+        suburb = str(a.get('suburb', 'Map Area')).upper()
+        postcode = a.get('postcode', '')
+        url_path = m.get('url', '')
+        lat = a.get('lat', m.get('geolocation', {}).get('latitude'))
+        lng = a.get('lng', m.get('geolocation', {}).get('longitude'))
 
-        df_g02 = df_g02.rename(columns=g02_map)
-        df_g02 = df_g02.loc[:, ~df_g02.columns.duplicated(keep='first')]
+        full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
+        if not full_address:
+            continue
 
-        if '_postcode_raw' not in df_g02.columns:
-            print(f"   WARNING: Postcode column not mapped. Cols: {df_g02.columns.tolist()}")
-            return pd.DataFrame()
-
-        df_g02['_postcode_raw'] = df_g02['_postcode_raw'].str.extract(r'(\d{4})')
-        df_g02 = df_g02.dropna(subset=['_postcode_raw'])
-        df_g02['Postcode'] = df_g02['_postcode_raw'].astype(int)
-
-        for col in ['abs_median_income_weekly', 'abs_median_age']:
-            if col in df_g02.columns:
-                df_g02[col] = pd.to_numeric(df_g02[col], errors='coerce')
+        date_val = m.get('dateSold', m.get('dateListed'))
+        if not date_val:
+            date_val = m.get('status', {}).get('date')
+        if not date_val:
+            item_str = json.dumps(item)
+            date_match = re.search(r'([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', item_str)
+            if date_match:
+                date_val = date_match.group(1)
             else:
-                df_g02[col] = np.nan
+                iso_match = re.search(r'"[A-Za-z]*[dD]ate[A-Za-z]*"\s*:\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})', item_str)
+                if iso_match:
+                    date_val = iso_match.group(1)
+        if not date_val:
+            date_val = 'N/A'
 
-        result = df_g02[['Postcode', 'abs_median_income_weekly', 'abs_median_age']].copy()
-        result = result.set_index('Postcode')
+        full_url = f"https://www.domain.com.au{url_path}" if url_path else "N/A"
 
-        if df_g01 is not None:
-            print(f"   G01 columns (first 15): {df_g01.columns.tolist()[:15]}")
-            g01_pc_col  = next((c for c in df_g01.columns
-                                if c.lower().startswith('poa_code') or c.lower() == 'region_id'), None)
-            g01_pop_col = next((c for c in df_g01.columns if c.lower() == 'tot_p_p'), None)
-            if not g01_pop_col:
-                g01_pop_col = next((c for c in df_g01.columns
-                                    if re.search(r'^tot_p', c.lower())), None)
-            print(f"   G01 pop col: {g01_pop_col}")
-            if g01_pc_col and g01_pop_col:
-                pop = df_g01[[g01_pc_col, g01_pop_col]].copy()
-                pop['Postcode'] = (pop[g01_pc_col].str.extract(r'(\d{4})')
-                                   .astype(float).astype('Int64'))
-                pop['abs_population'] = pd.to_numeric(pop[g01_pop_col], errors='coerce')
-                pop = pop[['Postcode', 'abs_population']].dropna().set_index('Postcode')
-                result = result.join(pop, how='left')
-                print(f"   Population joined for {result['abs_population'].notna().sum()} postcodes.")
-            else:
-                result['abs_population'] = np.nan
-        else:
-            print("   WARNING: G01 not found - population will be NaN.")
-            result['abs_population'] = np.nan
+        raw_land_size = f.get('landSize', np.nan)
+        land_unit = str(f.get('landUnit', '')).lower()
+        try:
+            if pd.notna(raw_land_size):
+                raw_land_size = float(raw_land_size)
+                if 'ha' in land_unit or 'hectare' in land_unit:
+                    raw_land_size = raw_land_size * 10000
+        except Exception:
+            pass
 
-        print(f"   OK: {len(result)} postcodes loaded from ABS.")
-        return result
+        record = {
+            'Property_ID': pid_str,
+            'Status': status_label,
+            'Full_Address': full_address,
+            'Suburb': suburb,
+            'Postcode': postcode,
+            'Property_Type': f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
+            'Date': date_val,
+            'Beds': f.get('beds', 0),
+            'Baths': f.get('baths', 0),
+            'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
+            'LandSize_sqm': raw_land_size,
+            'Propertycount': np.nan,
+            'Raw_Price': raw_price,
+            'Numeric_Price': parse_raw_price(raw_price),
+            'Latitude': lat,
+            'Longitude': lng,
+            'Distance_to_CBD_km': calculate_distance_to_cbd(lat, lng),
+            'URL': full_url,
+            'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d'),
+        }
+        records.append(record)
+        seen_records[pid_str] = {'Status': status_label, 'Price': raw_price}
 
-    except Exception as e:
-        print(f"   ERROR in ABS load: {e}")
-        import traceback; traceback.print_exc()
-        return pd.DataFrame()
+    return records, total_pages
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 2. VICTORIA CRIME STATISTICS
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_crime_stats():
-    """
-    Returns DataFrame indexed by Postcode (Int64) with columns:
-        crime_offence_count  — total recorded offences (latest year)
-        crime_suburb_ref     — most common suburb name for that postcode
-
-    crime_rate_per_100k is computed in main() after joining ABS population.
-    """
-    print("\n[2/3] Loading Victoria Crime Statistics ...")
+def is_access_denied(page):
     try:
-        raw = _download(CRIME_STATS_URL, "vic_crime_lga.xlsx", timeout=120)
-        xl = pd.ExcelFile(io.BytesIO(raw))
-        print(f"   Sheets: {xl.sheet_names}")
-
-        # Find sheet whose header row 0 contains 'Postcode'
-        target_sheet = None
-        for s in xl.sheet_names:
-            try:
-                probe = pd.read_excel(io.BytesIO(raw), sheet_name=s,
-                                      header=None, nrows=1, dtype=str)
-                if 'postcode' in ' '.join(probe.iloc[0].astype(str).str.lower()):
-                    target_sheet = s
-                    break
-            except Exception:
-                continue
-
-        if not target_sheet:
-            print("   WARNING: No postcode-level sheet found in crime file.")
-            return pd.DataFrame()
-
-        print(f"   Using sheet: '{target_sheet}'")
-        df = pd.read_excel(io.BytesIO(raw), sheet_name=target_sheet, dtype=str)
-        df.columns = df.columns.str.strip()
-        print(f"   Columns: {df.columns.tolist()}")
-        print(f"   Total rows: {len(df):,}")
-
-        pc_col     = next((c for c in df.columns if c.lower() == 'postcode'), None)
-        year_col   = next((c for c in df.columns if c.lower() == 'year'), None)
-        suburb_col = next((c for c in df.columns
-                           if 'suburb' in c.lower() or 'town' in c.lower()), None)
-        count_col  = next((c for c in df.columns
-                           if 'offence count' in c.lower() or 'incident count' in c.lower()), None)
-
-        print(f"   pc_col={pc_col}, year_col={year_col}, count_col={count_col}")
-
-        if not pc_col or not count_col:
-            print("   WARNING: Required columns not found - skipping crime data.")
-            return pd.DataFrame()
-
-        if year_col:
-            df[year_col] = pd.to_numeric(df[year_col], errors='coerce')
-            latest_year = int(df[year_col].max())
-            df = df[df[year_col] == latest_year].copy()
-            print(f"   Filtered to year {latest_year}: {len(df):,} rows")
-
-        df[pc_col]    = pd.to_numeric(df[pc_col], errors='coerce').astype('Int64')
-        df[count_col] = pd.to_numeric(df[count_col], errors='coerce')
-        df = df.dropna(subset=[pc_col, count_col])
-
-        result = (df.groupby(pc_col)[count_col]
-                  .sum().round(0)
-                  .rename('crime_offence_count')
-                  .to_frame())
-        result = result[result['crime_offence_count'] > 0]
-        result.index.name = 'Postcode'
-
-        if suburb_col:
-            top_suburb = (df.groupby(pc_col)[suburb_col]
-                          .agg(lambda x: x.value_counts().index[0] if len(x) > 0 else '')
-                          .rename('crime_suburb_ref'))
-            result = result.join(top_suburb)
-
-        print(f"   OK: {len(result):,} postcodes with crime data.")
-        return result
-
-    except Exception as e:
-        print(f"   ERROR in crime stats: {e}")
-        import traceback; traceback.print_exc()
-        return pd.DataFrame()
+        title = (page.title() or '').lower()
+        if 'access denied' in title or 'pardon our interruption' in title:
+            return True
+        body = page.evaluate("() => document.body ? document.body.innerText.slice(0, 300) : ''")
+        if 'access denied' in body.lower() or 'pardon our interruption' in body.lower():
+            return True
+    except Exception:
+        pass
+    return False
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# 3. PTV GTFS — Distance to Nearest Train Station
-# ══════════════════════════════════════════════════════════════════════════════
-
-def load_ptv_train_stops():
-    print("\n[3/3] Loading PTV GTFS train stops ...")
+def get_next_data(page, url):
     try:
-        raw = _download(PTV_GTFS_URL, "ptv_gtfs.zip", timeout=180)
-        with zipfile.ZipFile(io.BytesIO(raw)) as outer:
-            sub_zips = [n for n in outer.namelist() if n.endswith('.zip')]
-            train_stops_dfs = []
+        page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+    except (PlaywrightTimeout, Exception):
+        return 'BLOCKED'
+    try:
+        page.wait_for_load_state('networkidle', timeout=20_000)
+    except PlaywrightTimeout:
+        pass
+    if is_access_denied(page):
+        return 'BLOCKED'
+    simulate_human_behavior(page)
+    try:
+        content = page.evaluate(
+            "() => { const t = document.getElementById('__NEXT_DATA__'); return t ? t.textContent : null; }"
+        )
+    except Exception:
+        return 'BLOCKED'
+    if not content:
+        return 'BLOCKED'
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        return 'BLOCKED'
 
-            for sub in (sub_zips if sub_zips else ['']):
-                try:
-                    inner_zip = zipfile.ZipFile(io.BytesIO(outer.read(sub))) if sub else outer
-                    if 'stops.txt' not in inner_zip.namelist():
-                        continue
 
-                    with inner_zip.open('stops.txt') as f:
-                        stops = pd.read_csv(f, dtype=str)
-                    stops['stop_lat'] = pd.to_numeric(stops.get('stop_lat'), errors='coerce')
-                    stops['stop_lon'] = pd.to_numeric(stops.get('stop_lon'), errors='coerce')
-                    stops = stops.dropna(subset=['stop_lat', 'stop_lon'])
+def make_camoufox_kwargs():
+    kwargs = {
+        'headless': HEADLESS,
+        'humanize': False,
+        'locale': 'en-AU',
+        'os': random.choice(['windows', 'macos']),
+    }
+    if PROXY_URL:
+        kwargs['proxy'] = {'server': PROXY_URL}
+        kwargs['geoip'] = True
+    return kwargs
 
-                    if 'routes.txt' in inner_zip.namelist():
-                        with inner_zip.open('routes.txt') as f:
-                            routes = pd.read_csv(f, dtype=str)
-                        rail_routes = routes[routes.get('route_type', pd.Series()) == '2']
-                        if len(rail_routes) and 'trips.txt' in inner_zip.namelist():
-                            with inner_zip.open('trips.txt') as f:
-                                trips = pd.read_csv(f, dtype=str)
-                            with inner_zip.open('stop_times.txt') as f:
-                                st = pd.read_csv(f, dtype=str, usecols=['trip_id', 'stop_id'])
-                            rail_trips = trips[trips['route_id'].isin(rail_routes['route_id'])]
-                            rail_stop_ids = st[st['trip_id'].isin(rail_trips['trip_id'])]['stop_id'].unique()
-                            stops = stops[stops['stop_id'].isin(rail_stop_ids)]
 
-                    if len(stops):
-                        train_stops_dfs.append(stops[['stop_id', 'stop_name', 'stop_lat', 'stop_lon']])
-                    if sub:
-                        inner_zip.close()
-                except Exception as inner_e:
-                    print(f"      sub-zip {sub}: {inner_e}")
-
-            if not train_stops_dfs:
-                print("   WARNING: No train stops found.")
-                return pd.DataFrame()
-
-            all_stops = pd.concat(train_stops_dfs).drop_duplicates('stop_id')
-            all_stops = all_stops[
-                all_stops['stop_lat'].between(-38.6, -37.4) &
-                all_stops['stop_lon'].between(144.3, 145.6)
-            ]
-            print(f"   OK: {len(all_stops)} train stops in Melbourne area.")
-            return all_stops.reset_index(drop=True)
-
+def warm_up_full(page):
+    print("   🌐 Warm-up step 1: homepage...")
+    try:
+        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=20_000)
+        except PlaywrightTimeout:
+            pass
+        if is_access_denied(page):
+            print("   ❌ Homepage blocked.")
+            return False
+        print(f"   ✅ '{page.title()[:60]}'")
+        simulate_human_behavior(page)
+        human_delay(3.0, 6.0)
     except Exception as e:
-        print(f"   ERROR in PTV load: {e}")
-        return pd.DataFrame()
+        print(f"   ⚠️ Homepage exception: {e}")
+        return False
+
+    suburb = random.choice(WARMUP_SUBURBS)
+    print(f"   🌐 Warm-up step 2: /suburb-profile/{suburb}")
+    try:
+        page.goto(f'https://www.domain.com.au/suburb-profile/{suburb}',
+                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        if not is_access_denied(page):
+            simulate_human_behavior(page)
+            human_delay(4.0, 8.0)
+    except Exception as e:
+        print(f"   ⚠️ Suburb profile exception: {e}")
+
+    try:
+        print(f"   🌐 Warm-up step 3: real search for {suburb}")
+        page.goto(f'https://www.domain.com.au/sale/{suburb}/',
+                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        if not is_access_denied(page):
+            simulate_human_behavior(page)
+            human_delay(3.0, 7.0)
+    except Exception as e:
+        print(f"   ⚠️ Search exception: {e}")
+
+    cookies = page.context.cookies()
+    has_abck = '_abck' in [c['name'] for c in cookies]
+    print(f"   🍪 Akamai _abck cookie: {has_abck}")
+    return has_abck
 
 
-def compute_nearest_station(df_props, df_stops):
-    if df_stops.empty:
-        return pd.Series(np.nan, index=df_props.index)
+def warm_up_light(page):
+    print("   🌐 Light warm-up: homepage only")
+    try:
+        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=15_000)
+        except PlaywrightTimeout:
+            pass
+        if is_access_denied(page):
+            print("   ❌ Homepage blocked.")
+            return False
+        simulate_human_behavior(page)
+        human_delay(2.0, 4.0)
+    except Exception as e:
+        print(f"   ⚠️ Light warm-up exception: {e}")
+        return False
 
-    stops_lat = df_stops['stop_lat'].values
-    stops_lon = df_stops['stop_lon'].values
-    prop_lat  = df_props['Latitude'].values
-    prop_lon  = df_props['Longitude'].values
-
-    distances = []
-    CHUNK = 500
-    iterator = range(0, len(prop_lat), CHUNK)
-    if TQDM:
-        iterator = tqdm(iterator, desc="   nearest station", unit="chunk")
-
-    for i in iterator:
-        for lat, lon in zip(prop_lat[i:i+CHUNK], prop_lon[i:i+CHUNK]):
-            if np.isnan(lat) or np.isnan(lon):
-                distances.append(np.nan)
-                continue
-            dlat = np.radians(stops_lat - lat)
-            dlon = np.radians(stops_lon - lon)
-            a = (np.sin(dlat/2)**2
-                 + np.cos(np.radians(lat)) * np.cos(np.radians(stops_lat))
-                 * np.sin(dlon/2)**2)
-            d = 6371.0 * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-            distances.append(round(float(np.min(d)), 3))
-
-    return pd.Series(distances, index=df_props.index, name='dist_nearest_train_km')
+    cookies = page.context.cookies()
+    has_abck = '_abck' in [c['name'] for c in cookies]
+    print(f"   🍪 Akamai _abck cookie: {has_abck}")
+    return has_abck
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# MAIN
-# ══════════════════════════════════════════════════════════════════════════════
+def select_cells_for_today(all_cells):
+    """
+    Pick cells based on:
+      - offset (which group of 14 cells this day is responsible for)
+      - RUN_SLOT (A = first half, B = second half)
+    """
+    manual_offset = os.getenv('MANUAL_OFFSET', '').strip()
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input',     default='data/melbourne_price_data.csv')
-    parser.add_argument('--output',    default='data/melbourne_price_data_enriched.csv')
-    parser.add_argument('--cache-dir', default='.cache_enrich',
-                        help='Cache dir. Use another drive if C: is full: --cache-dir "D:\\.cache_enrich"')
-    args = parser.parse_args()
+    if manual_offset.isdigit():
+        offset = int(manual_offset) % ROTATION_STRIDE
+        print(f"   🎯 Manual override: offset {offset}")
+    elif manual_offset.lower() == 'random':
+        offset = random.randint(0, ROTATION_STRIDE - 1)
+        print(f"   🎲 Random offset: {offset}")
+    else:
+        today = dt.date.today()
+        offset = today.toordinal() % ROTATION_STRIDE
+        print(f"   📅 Auto offset {offset} for {today}")
 
-    global CACHE_DIR
-    CACHE_DIR = Path(args.cache_dir)
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"  Cache dir : {CACHE_DIR.resolve()}")
+    # Get all cells assigned to today's offset
+    all_today = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
 
-    print("=" * 65)
-    print("  Melbourne Property Enrichment Script")
-    print(f"  Input : {args.input}")
-    print(f"  Output: {args.output}")
-    print("=" * 65)
+    # Deterministic shuffle based on offset (so slot A and B always split same way)
+    rng = random.Random(offset)
+    rng.shuffle(all_today)
 
-    # Load base data
-    print("\n[0/3] Loading property data ...")
-    df = None
-    for enc in ('utf-8-sig', 'cp1252', 'latin-1'):
-        for sep in (',', '\t'):
-            try:
-                _df = pd.read_csv(args.input, sep=sep, encoding=enc,
-                                  on_bad_lines='skip', low_memory=False)
-                if 'Postcode' in _df.columns and 'Suburb' in _df.columns:
-                    df = _df
-                    print(f"   Detected: sep={'TAB' if sep == chr(9) else 'COMMA'}, encoding={enc}")
-                    break
-            except Exception:
-                continue
-        if df is not None:
+    # Split into A (first half) and B (second half)
+    half = len(all_today) // 2
+    slot_a = all_today[:half]
+    slot_b = all_today[half:]
+
+    print(f"   📦 Slot A: {sorted([idx for idx, _ in slot_a])}")
+    print(f"   📦 Slot B: {sorted([idx for idx, _ in slot_b])}")
+
+    if RUN_SLOT == 'A':
+        selected = slot_a
+        print(f"   🅰️ This run is SLOT A — {len(selected)} cells")
+    elif RUN_SLOT == 'B':
+        selected = slot_b
+        print(f"   🅱️ This run is SLOT B — {len(selected)} cells")
+    else:
+        selected = all_today
+        print(f"   ⚠️ RUN_SLOT='{RUN_SLOT}' invalid — using all cells")
+
+    # Cap at CELLS_PER_RUN
+    if len(selected) > CELLS_PER_RUN:
+        selected = selected[:CELLS_PER_RUN]
+
+    cell_ids = sorted([idx for idx, _ in selected])
+    print(f"   🗺️  Final cells to scrape: {cell_ids}")
+    return selected
+
+
+def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
+    t_lat, b_lat, l_lng, r_lng = cell
+    print(f"\n📍 cell #{cell_idx_global} | {t_lat},{l_lng} → {b_lat},{r_lng}")
+
+    cell_records = 0
+    cell_strikes = 0
+
+    modes = list(SEARCH_MODES)
+    random.shuffle(modes)
+
+    for status_label, mode_path, mode_extra in modes:
+        if cell_strikes >= CELL_MAX_STRIKES:
             break
 
-    if df is None:
-        raise RuntimeError("Could not load CSV. Check the file path and format.")
+        base_query = f"startloc={t_lat}%2C{l_lng}&endloc={b_lat}%2C{r_lng}"
+        if mode_extra:
+            base_query = f"{mode_extra}&{base_query}"
 
-    print(f"   OK: {len(df):,} properties loaded, {len(df.columns)} columns.")
-    df['Postcode'] = pd.to_numeric(df['Postcode'], errors='coerce').astype('Int64')
+        for pg in range(1, MAX_PAGES_PER_QUERY + 1):
+            if cell_strikes >= CELL_MAX_STRIKES:
+                break
 
-    # Enrich
-    abs_df   = load_abs_g02()
-    crime_df = load_crime_stats()
-    stops_df = load_ptv_train_stops()
+            # Graceful timeout: stop mid-cell if running out of time.
+            if should_stop():
+                print(f"   ⏰ Timeout reached, stopping cell mid-scrape")
+                break
 
-    # Merge ABS
-    if not abs_df.empty:
-        df = df.join(abs_df, on='Postcode', how='left')
-        print(f"\n   ABS: filled {df['abs_median_income_weekly'].notna().sum():,} rows.")
+            # Graduated abandon: 0% for pg 1-5, then grows from 5% at pg 6
+            # by 3% per page, capped at 25%.
+            if pg >= ABANDON_START_PAGE:
+                abandon_prob = min(
+                    ABANDON_BASE_PROB + (pg - ABANDON_START_PAGE) * ABANDON_GROWTH,
+                    ABANDON_MAX_PROB
+                )
+                if random.random() < abandon_prob:
+                    print(f"   🚪 Stopping at page {pg} (human-like abandon, p={abandon_prob:.2f})")
+                    break
+
+            if pages_in_session >= PAGES_BEFORE_REST:
+                rest = random.uniform(*REST_DURATION)
+                print(f"   ☕ Rest {rest:.0f}s")
+                time.sleep(rest)
+                pages_in_session = 0
+            elif pg > 1:
+                human_delay(*DELAY_BETWEEN_REQUESTS)
+
+            url = f"https://www.domain.com.au/{mode_path}/?{base_query}&page={pg}"
+            payload = get_next_data(page, url)
+            pages_in_session += 1
+
+            if payload == 'BLOCKED':
+                cell_strikes += 1
+                print(f"   ⚠️ Block: {status_label} pg {pg} (strike {cell_strikes}/{CELL_MAX_STRIKES})")
+                continue
+
+            page_records, total_pages = parse_listings_payload(payload, status_label, seen_records)
+            if page_records:
+                save_incremental_data(page_records, FILE_NAME)
+                cell_records += len(page_records)
+                print(f"   + {len(page_records)} ({status_label} pg {pg}/{total_pages})")
+            elif pg == 1:
+                print(f"   ◌ No {status_label} listings")
+                break
+
+            if pg >= total_pages:
+                break
+
+        human_delay(*DELAY_BETWEEN_REQUESTS)
+
+    was_blocked = (cell_records == 0 and cell_strikes > 0)
+    return cell_records, was_blocked, pages_in_session
+
+
+def main():
+    # Load dedup state
+    seen_records = {}
+    if os.path.exists(FILE_NAME) and os.path.getsize(FILE_NAME) > 0:
+        try:
+            df_existing = pd.read_csv(FILE_NAME)
+            for _, row in df_existing.iterrows():
+                pid = str(row.get('Property_ID', ''))
+                seen_records[pid] = {
+                    'Status': str(row.get('Status', '')),
+                    'Price': str(row.get('Raw_Price', '')),
+                }
+            print(f"   📚 Loaded {len(seen_records)} existing records for dedup")
+        except pd.errors.EmptyDataError:
+            pass
+
+    # Build grid
+    lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
+    lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
+    all_cells = []
+    for i in range(GRID_SIZE):
+        for j in range(GRID_SIZE):
+            t_lat = round(LAT_NORTH - (i * lat_step), 4)
+            b_lat = round(LAT_NORTH - ((i + 1) * lat_step), 4)
+            l_lng = round(LNG_WEST + (j * lng_step), 4)
+            r_lng = round(LNG_WEST + ((j + 1) * lng_step), 4)
+            all_cells.append((t_lat, b_lat, l_lng, r_lng))
+
+    todays_cells = select_cells_for_today(all_cells)
+    total_today = len(todays_cells)
+    num_sessions = math.ceil(total_today / CELLS_PER_SESSION) if total_today > 0 else 0
+    print(f"   📊 This run: {total_today} cells, {num_sessions} sessions")
+
+    if PROXY_URL:
+        print(f"   🛡️ Proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
     else:
-        for col in ['abs_median_income_weekly', 'abs_median_age', 'abs_population']:
-            df[col] = np.nan
+        print("   ⚠️  No proxy")
 
-    # Merge Crime
-    if not crime_df.empty:
-        df = df.join(crime_df, on='Postcode', how='left')
-        df['crime_rate_per_100k'] = np.nan
-        mask = (df['abs_population'].notna() & df['crime_offence_count'].notna()
-                & (df['abs_population'] > 0))
-        df.loc[mask, 'crime_rate_per_100k'] = (
-            df.loc[mask, 'crime_offence_count'] / df.loc[mask, 'abs_population'] * 100000
-        ).round(1)
-        print(f"   Crime: filled {df['crime_offence_count'].notna().sum():,} rows "
-              f"({df['crime_rate_per_100k'].notna().sum():,} with rate/100k).")
-    else:
-        df['crime_offence_count'] = np.nan
-        df['crime_rate_per_100k'] = np.nan
+    if total_today == 0:
+        print("\n⚠️ No cells to scrape this run.")
+        return
 
-    # Nearest train
-    if not stops_df.empty:
-        df['dist_nearest_train_km'] = compute_nearest_station(df, stops_df)
-        print(f"\n   PTV: filled {df['dist_nearest_train_km'].notna().sum():,} rows.")
-    else:
-        df['dist_nearest_train_km'] = np.nan
+    total_records = 0
+    cells_done = 0
+    cells_empty = 0
+    cells_blocked = 0
+    consecutive_blocks = 0
+    session_idx = 0
+    cell_pos = 0
 
-    df['Enriched_Date'] = datetime.now().strftime('%Y-%m-%d')
+    while cell_pos < total_today:
+        if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
+            print(f"\n🛑 {consecutive_blocks} blocked cells in a row — stopping run")
+            print(f"   Saving partial data. Try again later.")
+            break
 
-    # Save
-    out_path = Path(args.output)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_path, index=False, encoding='utf-8-sig')
+        # Graceful timeout check before starting new session.
+        if should_stop():
+            remaining_min = time_remaining() / 60
+            print(f"\n⏰ Approaching workflow timeout ({remaining_min:.1f} min left)")
+            print(f"   Stopping gracefully after {cell_pos}/{total_today} cells")
+            break
 
-    print(f"\n{'='*65}")
-    print(f"  DONE: Saved -> {out_path}")
-    print(f"  Rows: {len(df):,}  |  Columns: {len(df.columns)}")
-    print("  New columns:")
-    new_cols = [
-        'abs_median_income_weekly', 'abs_median_age', 'abs_population',
-        'crime_offence_count', 'crime_rate_per_100k',
-        'dist_nearest_train_km', 'Enriched_Date',
-    ]
-    for c in new_cols:
-        filled = df[c].notna().sum() if c in df.columns else 0
-        print(f"    {c:<35} {filled:>7,} / {len(df):,} filled")
-    print('='*65)
+        session_idx += 1
+        session_end = min(cell_pos + CELLS_PER_SESSION, total_today)
+        session_cells = todays_cells[cell_pos:session_end]
+
+        print(f"\n{'='*60}")
+        print(f"🚀 SESSION {session_idx}/{num_sessions} — cells {cell_pos + 1}-{session_end} of {total_today}")
+        print(f"{'='*60}")
+
+        try:
+            with Camoufox(**make_camoufox_kwargs()) as browser:
+                page = browser.new_page()
+
+                warm_up_ok = warm_up_full(page) if session_idx == 1 else warm_up_light(page)
+                if not warm_up_ok:
+                    print(f"   ❌ Warm-up failed for session {session_idx}")
+                    consecutive_blocks += 1
+                    cell_pos = session_end
+                    continue
+
+                human_delay(3.0, 6.0)
+
+                pages_in_session = 0
+                session_records = 0
+
+                for (cell_idx_global, cell) in session_cells:
+                    if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
+                        break
+
+                    cell_records, was_blocked, pages_in_session = scrape_cell(
+                        page, cell_idx_global, cell, seen_records, pages_in_session
+                    )
+
+                    if cell_records > 0:
+                        # Cell had data
+                        session_records += cell_records
+                        total_records += cell_records
+                        cells_done += 1
+                        consecutive_blocks = 0
+                    elif was_blocked:
+                        # Cell was blocked by Akamai
+                        cells_blocked += 1
+                        consecutive_blocks += 1
+                        print(f"   🚫 Cell blocked (run streak: {consecutive_blocks})")
+                    else:
+                        # Cell completed but had no listings (empty region)
+                        cells_done += 1
+                        cells_empty += 1
+                        consecutive_blocks = 0
+
+                    cell_pos += 1
+
+                print(f"\n   📊 Session {session_idx} done: +{session_records} records")
+
+        except Exception as e:
+            print(f"   ❌ Session exception: {e}")
+            cell_pos = session_end
+
+        if cell_pos < total_today and consecutive_blocks < MAX_CONSECUTIVE_BLOCKS:
+            cooldown = random.uniform(*SESSION_COOLDOWN)
+            print(f"\n   ⏰ Cooldown {cooldown:.0f}s before next session...")
+            time.sleep(cooldown)
+
+    print(f"\n{'='*60}")
+    print(f"✅ DONE — Run slot {RUN_SLOT}")
+    print(f"{'='*60}")
+    print(f"   Sessions used:  {session_idx}")
+    print(f"   Cells done:     {cells_done}/{total_today}  "
+          f"({cells_done - cells_empty} with data, {cells_empty} empty)")
+    if cells_blocked > 0:
+        print(f"   Cells blocked:  {cells_blocked}")
+    print(f"   New records:    {total_records}")
+    elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
+    print(f"   Run time:       {elapsed_min:.1f} min")
+    if cell_pos < total_today:
+        skipped = total_today - cell_pos
+        print(f"   Cells skipped:  {skipped} (will be retried in next rotation cycle)")
+
+    if total_records == 0 and consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
+        print("⚠️  Stopped early due to blocks — partial run")
+        sys.exit(1)
 
 
 if __name__ == '__main__':
