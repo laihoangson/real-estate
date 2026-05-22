@@ -86,6 +86,42 @@ CELL_MAX_STRIKES = 2
 # Stop entire run if blocks pile up
 MAX_CONSECUTIVE_BLOCKS = 3
 
+# ==========================================
+# GRACEFUL TIMEOUT (Option 1: no carry-over)
+# ==========================================
+# Stop scraping before GitHub Actions kills the workflow.
+# GitHub Actions limit is 6h per job; we stop 20 min early so the
+# commit/push step has time to finish.
+SCRIPT_START_TIME = time.time()
+RUN_TIMEOUT_SECONDS = 5 * 3600 + 40 * 60   # 5h40m
+
+
+def time_remaining():
+    """Seconds left before graceful timeout."""
+    elapsed = time.time() - SCRIPT_START_TIME
+    return max(0, RUN_TIMEOUT_SECONDS - elapsed)
+
+
+def should_stop():
+    """True if approaching timeout (less than 60s remaining)."""
+    return time_remaining() < 60
+
+
+def interruptible_sleep(seconds, label=""):
+    """Sleep in 5-second chunks; abort early if timeout approaches.
+
+    This prevents the script from sleeping past the workflow timeout
+    during long cooldowns/rests/delays.
+    """
+    end = time.time() + seconds
+    while time.time() < end:
+        if should_stop():
+            print(f"   ⏰ Interrupting sleep ({label}) — timeout approaching")
+            return
+        chunk = min(5.0, end - time.time())
+        if chunk > 0:
+            time.sleep(chunk)
+
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
     'fitzroy-vic-3065', 'south-yarra-vic-3141', 'carlton-vic-3053',
@@ -151,7 +187,7 @@ def calculate_distance_to_cbd(lat2, lon2):
 
 
 def human_delay(min_sec, max_sec):
-    time.sleep(random.uniform(min_sec, max_sec))
+    interruptible_sleep(random.uniform(min_sec, max_sec), "human delay")
 
 
 def save_incremental_data(new_data_list, file_path):
@@ -473,6 +509,11 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
             if cell_strikes >= CELL_MAX_STRIKES:
                 break
 
+            # Graceful timeout: stop mid-cell if running out of time.
+            if should_stop():
+                print(f"   ⏰ Timeout reached, stopping cell mid-scrape")
+                break
+
             # Graduated abandon: 0% for pg 1-5, then grows from 5% at pg 6
             # by 3% per page, capped at 25%.
             if pg >= ABANDON_START_PAGE:
@@ -487,7 +528,7 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
             if pages_in_session >= PAGES_BEFORE_REST:
                 rest = random.uniform(*REST_DURATION)
                 print(f"   ☕ Rest {rest:.0f}s")
-                time.sleep(rest)
+                interruptible_sleep(rest, "rest")
                 pages_in_session = 0
             elif pg > 1:
                 human_delay(*DELAY_BETWEEN_REQUESTS)
@@ -575,6 +616,13 @@ def main():
             print(f"   Saving partial data. Try again later.")
             break
 
+        # Graceful timeout check before starting new session.
+        if should_stop():
+            remaining_min = time_remaining() / 60
+            print(f"\n⏰ Approaching workflow timeout ({remaining_min:.1f} min left)")
+            print(f"   Stopping gracefully after {cell_pos}/{total_today} cells")
+            break
+
         session_idx += 1
         session_end = min(cell_pos + CELLS_PER_SESSION, total_today)
         session_cells = todays_cells[cell_pos:session_end]
@@ -635,7 +683,7 @@ def main():
         if cell_pos < total_today and consecutive_blocks < MAX_CONSECUTIVE_BLOCKS:
             cooldown = random.uniform(*SESSION_COOLDOWN)
             print(f"\n   ⏰ Cooldown {cooldown:.0f}s before next session...")
-            time.sleep(cooldown)
+            interruptible_sleep(cooldown, "session cooldown")
 
     print(f"\n{'='*60}")
     print(f"✅ DONE — Run slot {RUN_SLOT}")
@@ -646,6 +694,11 @@ def main():
     if cells_blocked > 0:
         print(f"   Cells blocked:  {cells_blocked}")
     print(f"   New records:    {total_records}")
+    elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
+    print(f"   Run time:       {elapsed_min:.1f} min")
+    if cell_pos < total_today:
+        skipped = total_today - cell_pos
+        print(f"   Cells skipped:  {skipped} (will be retried in next rotation cycle)")
 
     if total_records == 0 and consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
         print("⚠️  Stopped early due to blocks — partial run")
