@@ -93,7 +93,7 @@ MAX_CONSECUTIVE_BLOCKS = 3
 # GitHub Actions limit is 6h per job; we stop 20 min early so the
 # commit/push step has time to finish.
 SCRIPT_START_TIME = time.time()
-RUN_TIMEOUT_SECONDS = 5 * 3600 + 40 * 60   # 5h40m
+RUN_TIMEOUT_SECONDS = 5 * 3600 + 20 * 60   # 5h40m
 
 
 def time_remaining():
@@ -104,7 +104,7 @@ def time_remaining():
 
 def should_stop():
     """True if approaching timeout (less than 60s remaining)."""
-    return time_remaining() < 60
+    return time_remaining() < 300
 
 
 def interruptible_sleep(seconds, label=""):
