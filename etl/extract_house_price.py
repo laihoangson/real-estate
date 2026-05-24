@@ -34,6 +34,7 @@ import time
 import math
 import random
 import re
+import signal
 import datetime as dt
 import pandas as pd
 import numpy as np
@@ -93,7 +94,10 @@ MAX_CONSECUTIVE_BLOCKS = 3
 # GitHub Actions limit is 6h per job; we stop 20 min early so the
 # commit/push step has time to finish.
 SCRIPT_START_TIME = time.time()
-RUN_TIMEOUT_SECONDS = 5 * 3600 + 20 * 60   # 5h40m
+RUN_TIMEOUT_SECONDS = 5 * 3600 + 20 * 60   # 5h20m
+# NOTE: Python stops at 5h20m, leaving ~30 min for commit/push before the
+# GitHub Actions job timeout (set to 5h50m in scrape.yml). The two MUST differ:
+# if both are 5h40m, GitHub kills the job mid-commit and data is lost.
 
 
 def time_remaining():
@@ -103,7 +107,11 @@ def time_remaining():
 
 
 def should_stop():
-    """True if approaching timeout (less than 60s remaining)."""
+    """True if approaching timeout (less than 5 min remaining).
+
+    A 5-minute buffer ensures even a slow page.goto (45s timeout) or
+    Camoufox browser shutdown won't push us past the limit.
+    """
     return time_remaining() < 300
 
 
@@ -121,6 +129,27 @@ def interruptible_sleep(seconds, label=""):
         chunk = min(5.0, end - time.time())
         if chunk > 0:
             time.sleep(chunk)
+
+
+class GracefulExit(Exception):
+    """Raised by the SIGALRM watchdog when the hard time limit is hit."""
+    pass
+
+
+def _watchdog_handler(signum, frame):
+    """Fired by SIGALRM at RUN_TIMEOUT. Interrupts whatever is blocking
+    (even a hung page.goto) and raises GracefulExit, which main() catches
+    to print a summary and exit cleanly so the commit step still runs."""
+    raise GracefulExit()
+
+
+def arm_watchdog():
+    """Schedule SIGALRM to fire at RUN_TIMEOUT_SECONDS. Unix only (GitHub
+    Actions runs Linux), so guard for platforms without SIGALRM."""
+    if hasattr(signal, "SIGALRM"):
+        signal.signal(signal.SIGALRM, _watchdog_handler)
+        signal.alarm(int(RUN_TIMEOUT_SECONDS))
+        print(f"   ⏲️  Watchdog armed: hard stop at {RUN_TIMEOUT_SECONDS/3600:.2f}h")
 
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
@@ -561,6 +590,9 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
 
 
 def main():
+    # Arm hard-timeout watchdog (interrupts even a hung page.goto).
+    arm_watchdog()
+
     # Load dedup state
     seen_records = {}
     if os.path.exists(FILE_NAME) and os.path.getsize(FILE_NAME) > 0:
@@ -706,4 +738,13 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except GracefulExit:
+        # Hard watchdog fired (e.g. stuck in a hung page.goto). All scraped
+        # rows were already saved incrementally page-by-page, so no data is
+        # lost. Exit 0 so the workflow's commit/push step still runs.
+        elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
+        print(f"\n⏲️  Hard watchdog fired at {elapsed_min:.1f} min — exiting cleanly")
+        print("   All scraped data was saved incrementally; commit step will run.")
+        sys.exit(0)

@@ -46,9 +46,10 @@ jobs:
   scrape:
     name: 1 - Scrape (7 cells, 10 pages each)
     runs-on: ubuntu-latest
-    # 5h40m — matches Python script's RUN_TIMEOUT_SECONDS for graceful stop.
-    # GitHub Actions free tier limit is 6h; 5h40m leaves 20 min buffer
-    # for commit/push step to finish.
+    # 5h50m — MUST be larger than Python's RUN_TIMEOUT (5h20m) so the script
+    # stops scraping and commits BEFORE GitHub kills the job. If both were equal,
+    # GitHub kills mid-commit and data is lost (job shows "Cancelled").
+    # Timeline: Python stops at 5h20m → commits by ~5h25m → YAML never reached.
     timeout-minutes: 350
 
     env:
@@ -210,7 +211,8 @@ jobs:
       - name: Install enrich dependencies
         if: steps.check.outputs.should_run == 'true'
         run: |
-          pip install pandas requests openpyxl tqdm
+          pip install --upgrade pip
+          pip install pandas requests openpyxl tqdm numpy
 
       - name: Run enrichment
         if: steps.check.outputs.should_run == 'true'
