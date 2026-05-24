@@ -34,7 +34,7 @@ import time
 import math
 import random
 import re
-import signal
+import threading
 import datetime as dt
 import pandas as pd
 import numpy as np
@@ -54,7 +54,7 @@ LNG_WEST, LNG_EAST = 144.35, 145.40
 HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'
 PROXY_URL = os.getenv('PROXY_URL')
 
-NAV_TIMEOUT_MS = 45_000
+NAV_TIMEOUT_MS = 30_000   # 30s — fail fast on hung pages (was 45s)
 
 # Daily slice math: 14 cells/day × 14 days = 196 (= grid size, perfect)
 CELLS_PER_DAY = 14
@@ -94,10 +94,8 @@ MAX_CONSECUTIVE_BLOCKS = 3
 # GitHub Actions limit is 6h per job; we stop 20 min early so the
 # commit/push step has time to finish.
 SCRIPT_START_TIME = time.time()
-RUN_TIMEOUT_SECONDS = 5 * 3600 + 20 * 60   # 5h20m
-# NOTE: Python stops at 5h20m, leaving ~30 min for commit/push before the
-# GitHub Actions job timeout (set to 5h50m in scrape.yml). The two MUST differ:
-# if both are 5h40m, GitHub kills the job mid-commit and data is lost.
+RUN_TIMEOUT_SECONDS = 5 * 3600   # 5h00m hard stop (YAML allows 5h50m)
+
 
 
 def time_remaining():
@@ -131,25 +129,38 @@ def interruptible_sleep(seconds, label=""):
             time.sleep(chunk)
 
 
-class GracefulExit(Exception):
-    """Raised by the SIGALRM watchdog when the hard time limit is hit."""
-    pass
+def _watchdog_thread():
+    """Daemon thread: sleeps until RUN_TIMEOUT, then force-exits the whole
+    process with os._exit(0).
 
-
-def _watchdog_handler(signum, frame):
-    """Fired by SIGALRM at RUN_TIMEOUT. Interrupts whatever is blocking
-    (even a hung page.goto) and raises GracefulExit, which main() catches
-    to print a summary and exit cleanly so the commit step still runs."""
-    raise GracefulExit()
+    Why os._exit and not sys.exit / SIGALRM:
+      - Playwright's sync API runs the browser via a subprocess + an internal
+        event loop. When the main thread is blocked inside a hung page.goto(),
+        neither a SIGALRM-raised exception nor sys.exit() reliably interrupts
+        it (the signal is queued until Python bytecode resumes, which may
+        never happen). A separate daemon thread calling os._exit() bypasses
+        all of that and terminates immediately at the OS level.
+      - All scraped rows are written to disk incrementally (page-by-page), so
+        a hard exit loses at most the current in-flight page, not the dataset.
+      - Exit code 0 ensures the workflow's 'Run scraper' step is marked success
+        so the subsequent 'Commit & push' step runs and saves the data.
+    """
+    time.sleep(RUN_TIMEOUT_SECONDS)
+    elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
+    print(f"\n⏲️  WATCHDOG: hard time limit reached at {elapsed_min:.1f} min", flush=True)
+    print("   Forcing clean exit. All scraped data already saved incrementally.", flush=True)
+    print("   The commit/push step will now run.", flush=True)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)   # immediate OS-level termination, bypasses any hung call
 
 
 def arm_watchdog():
-    """Schedule SIGALRM to fire at RUN_TIMEOUT_SECONDS. Unix only (GitHub
-    Actions runs Linux), so guard for platforms without SIGALRM."""
-    if hasattr(signal, "SIGALRM"):
-        signal.signal(signal.SIGALRM, _watchdog_handler)
-        signal.alarm(int(RUN_TIMEOUT_SECONDS))
-        print(f"   ⏲️  Watchdog armed: hard stop at {RUN_TIMEOUT_SECONDS/3600:.2f}h")
+    """Start the daemon watchdog thread. Works on all platforms."""
+    t = threading.Thread(target=_watchdog_thread, daemon=True)
+    t.start()
+    print(f"   ⏲️  Watchdog armed: hard stop at {RUN_TIMEOUT_SECONDS/3600:.2f}h "
+          f"({RUN_TIMEOUT_SECONDS/60:.0f} min)")
 
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
@@ -354,7 +365,7 @@ def get_next_data(page, url):
     except (PlaywrightTimeout, Exception):
         return 'BLOCKED'
     try:
-        page.wait_for_load_state('networkidle', timeout=20_000)
+        page.wait_for_load_state('networkidle', timeout=8_000)
     except PlaywrightTimeout:
         pass
     if is_access_denied(page):
@@ -392,7 +403,7 @@ def warm_up_full(page):
     try:
         page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
         try:
-            page.wait_for_load_state('networkidle', timeout=20_000)
+            page.wait_for_load_state('networkidle', timeout=8_000)
         except PlaywrightTimeout:
             pass
         if is_access_denied(page):
@@ -666,6 +677,10 @@ def main():
         try:
             with Camoufox(**make_camoufox_kwargs()) as browser:
                 page = browser.new_page()
+                # Hard cap on every Playwright operation so nothing can hang
+                # forever (the root cause of jobs running the full 5h50m).
+                page.set_default_timeout(NAV_TIMEOUT_MS)
+                page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
 
                 warm_up_ok = warm_up_full(page) if session_idx == 1 else warm_up_light(page)
                 if not warm_up_ok:
@@ -738,13 +753,4 @@ def main():
 
 
 if __name__ == '__main__':
-    try:
-        main()
-    except GracefulExit:
-        # Hard watchdog fired (e.g. stuck in a hung page.goto). All scraped
-        # rows were already saved incrementally page-by-page, so no data is
-        # lost. Exit 0 so the workflow's commit/push step still runs.
-        elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
-        print(f"\n⏲️  Hard watchdog fired at {elapsed_min:.1f} min — exiting cleanly")
-        print("   All scraped data was saved incrementally; commit step will run.")
-        sys.exit(0)
+    main()
