@@ -49,7 +49,7 @@ jobs:
     # 5h40m — matches Python script's RUN_TIMEOUT_SECONDS for graceful stop.
     # GitHub Actions free tier limit is 6h; 5h40m leaves 20 min buffer
     # for commit/push step to finish.
-    timeout-minutes: 345
+    timeout-minutes: 350
 
     env:
       HEADLESS: "true"
