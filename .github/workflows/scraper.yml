@@ -106,9 +106,11 @@ jobs:
       # ============================================
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip
-          pip install --upgrade "camoufox[geoip]" playwright
-          pip install pandas beautifulsoup4 numpy
+         pip install --upgrade pip
+         # pin versions
+         pip install "playwright==1.52.0"
+         pip install "camoufox[geoip]==0.4.11"
+         pip install pandas beautifulsoup4 numpy
 
       - name: Print Playwright + Camoufox versions
         run: |
@@ -124,7 +126,7 @@ jobs:
           path: ~/.cache/camoufox
           # Bump cache version when upgrading Camoufox so the cached binary
           # doesn't get reused after a version bump.
-          key: camoufox-binary-v2-${{ runner.os }}
+          key: camoufox-binary-v3-${{ runner.os }}
 
       - name: Fetch Camoufox browser binary
         if: steps.cache-camoufox.outputs.cache-hit != 'true'
