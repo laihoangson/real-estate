@@ -1,5 +1,5 @@
 {
-  "data_snapshot_date": "2026-05-30",
+  "data_snapshot_date": "2026-06-02",
   "land_property_types": [
     "Development Site",
     "Farm",
@@ -59,19 +59,19 @@
   "price_floor": 20000,
   "price_ceiling": 20000000,
   "landsize_caps_by_type": {
-    "House": 50842.0,
-    "Vacant land": 212450.0,
+    "House": 50310.0,
+    "Vacant land": 211876.0,
     "Rural": 1956387.0,
     "Acreage / Semi-Rural": 1330224.0,
-    "Apartment / Unit / Flat": 5347.0,
-    "Townhouse": 887.0,
+    "Apartment / Unit / Flat": 5330.0,
+    "Townhouse": 885.0,
     "New land": 11878.0,
     "Development Site": 45532.0,
     "Farm": 842160.0,
     "Villa": 263045.0,
-    "New House & Land": 4024.0,
+    "New House & Land": 4021.0,
     "New Apartments / Off the Plan": 2565.0,
-    "Block of Units": 5101.0,
+    "Block of Units": 5026.0,
     "Semi-Detached": 679.0,
     "Rural Lifestyle": 632469.0
   },
