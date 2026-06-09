@@ -1,45 +1,20 @@
 """
-Domain.com.au scraper — v5.4 (Akamai trust-building + adaptive backoff)
+Domain.com.au scraper — v5.5 (fix viewport kwarg + asyncio loop crash)
 
-Root cause from v5.3 runs:
-  - _abck cookie obtained on homepage (fingerprint OK)
-  - But suburb-profile / sale / sold pages ALL blocked → behavioural trust score ≈ 0
-  - Scraper then hits search cells immediately with low trust → 100% block rate
+Bugs fixed from v5.4 run:
+  1. BrowserType.launch() unexpected kwarg 'viewport'
+       Camoufox does NOT accept 'viewport'; use 'screen=Screen(max_width, max_height)'
+       from browserforge.fingerprints, or 'window=(w, h)' for window size.
+       Fixed in make_camoufox_kwargs().
 
-v5.4 changes vs v5.3:
-────────────────────────────────────────────────────────────
-WARM-UP
-  - warm_up_full: new strategy — use known-unblocked lightweight pages
-    (/education/buying, /news, /suburb-profile pages with simpler JS)
-    to accumulate trust BEFORE hitting search endpoints
-  - Added warm_up_probe(): after warm-up, silently test 1 search URL;
-    if blocked, run extra trust-building round (max 2 retries) before
-    committing to the session
-  - Warm-up now does real scrolling + random mouse moves via page.mouse
-    (Akamai BotManager checks mouse entropy, not just presence of _abck)
-  - Min warm-up time enforced: 45s for full, 20s for light
+  2. "Playwright Sync API inside asyncio loop"
+       Playwright 1.52+ sync API raises if called from a thread that already has a
+       running asyncio event loop (common in GitHub Actions Python 3.11 environment
+       and some OS-level event loop managers).
+       Fix: each session runs inside run_session_in_thread() which spawns a fresh
+       daemon thread → clean event loop → no conflict.
 
-RETRY / BACKOFF
-  - Per-cell exponential backoff: after a block, wait 30–90s before
-    retrying the SAME page (max 2 retries per page)
-  - Block strike resets to 0 after any successful page in a cell
-    (v5.3 strikes were cell-level, never reset mid-cell)
-
-CELL SELECTION
-  - Cells sorted by lng column then shuffled within column groups →
-    avoids hitting the same lng band (144.875–144.95) every run
-  - Added jitter: 20% chance to swap to an adjacent cell at runtime
-
-REQUESTS
-  - Merged For Sale + Sold into interleaved single-cell scan:
-    alternates modes per page rather than exhausting one mode first
-    → halves the number of "mode switches" Akamai can fingerprint
-  - Random query param order per request (cosmetic but adds entropy)
-
-TIMING
-  - DELAY_BETWEEN_REQUESTS: 18-35s → 25-50s (higher baseline)
-  - Added BLOCK_RECOVERY_SLEEP: 45-90s after any block before next req
-  - SESSION_COOLDOWN: 90-180s → 120-240s
+Everything else identical to v5.4.
 """
 
 import os
@@ -56,8 +31,9 @@ import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from urllib.parse import urlparse
+from browserforge.fingerprints import Screen
 
-print("STARTING SCRAPER (v5.4 — Akamai trust-building + adaptive backoff)")
+print("STARTING SCRAPER (v5.5 — fix viewport kwarg + asyncio loop)")
 
 # ==========================================
 # CONFIGURATION
@@ -337,16 +313,18 @@ def get_next_data(page, url):
 
 
 def make_camoufox_kwargs():
+    # v5.5: 'viewport' is NOT a valid Camoufox kwarg — it belongs to Playwright's
+    # BrowserContext, not the Firefox launcher.  Use 'screen' (Screen object from
+    # browserforge) to hint the fingerprint generator, or 'window' for actual size.
+    w = random.choice([1280, 1366, 1440, 1536])
+    h = random.choice([768, 800, 864, 900])
     kwargs = {
         "headless": HEADLESS,
         "humanize": True,
-        "locale": "en-AU",
-        "os": random.choice(["windows", "macos"]),
-        # v5.4: randomise viewport slightly to avoid fingerprint
-        "viewport": {
-            "width":  random.choice([1280, 1366, 1440, 1536]),
-            "height": random.choice([768, 800, 864, 900]),
-        },
+        "locale":   "en-AU",
+        "os":       random.choice(["windows", "macos"]),
+        "screen":   Screen(max_width=w, max_height=h),
+        "window":   (w, h),
     }
     if PROXY_URL:
         p = urlparse(PROXY_URL)
@@ -849,49 +827,94 @@ def main():
         print(f"{'='*60}")
 
         try:
-            with Camoufox(**make_camoufox_kwargs()) as browser:
-                page = browser.new_page()
-                page.set_default_timeout(NAV_TIMEOUT_MS)
-                page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
+            # v5.5 FIX: Playwright 1.52+ sync API cannot be called from a thread
+            # that already has a running asyncio event loop (common in GitHub Actions
+            # Python 3.11 / some OS environments).  Running each session in its own
+            # fresh daemon thread guarantees a clean event loop context.
+            session_result = {
+                "records":  0,
+                "blocked":  False,
+                "cell_pos": cell_pos,
+                "error":    None,
+            }
 
-                if session_idx == 1:
-                    warm_up_full(page)
-                    warm_up_probe(page)   # v5.4: probe before first scrape
-                else:
-                    warm_up_light(page)
+            def run_session():
+                try:
+                    with Camoufox(**make_camoufox_kwargs()) as browser:
+                        page = browser.new_page()
+                        page.set_default_timeout(NAV_TIMEOUT_MS)
+                        page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
 
-                human_delay(3.0, 6.0)
+                        if session_idx == 1:
+                            warm_up_full(page)
+                            warm_up_probe(page)
+                        else:
+                            warm_up_light(page)
 
-                pages_in_session = 0
-                session_records  = 0
+                        human_delay(3.0, 6.0)
 
-                for (cell_idx_global, cell) in session_cells:
-                    if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
-                        break
-                    if should_stop():
-                        break
+                        pages_in_sess = 0
+                        sess_records  = 0
+                        pos           = cell_pos
 
-                    cell_recs, was_blocked, pages_in_session = scrape_cell(
-                        page, cell_idx_global, cell, seen_records, pages_in_session
-                    )
+                        for (cell_idx_global, cell) in session_cells:
+                            if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
+                                break
+                            if should_stop():
+                                break
 
-                    if cell_recs > 0:
-                        session_records    += cell_recs
-                        total_records      += cell_recs
-                        cells_done         += 1
-                        consecutive_blocks  = 0
-                    elif was_blocked:
-                        cells_blocked      += 1
-                        consecutive_blocks += 1
-                        print(f"   🚫 Cell fully blocked (streak: {consecutive_blocks})")
-                    else:
-                        cells_done         += 1
-                        cells_empty        += 1
-                        consecutive_blocks  = 0
+                            cell_recs, was_blocked, pages_in_sess = scrape_cell(
+                                page, cell_idx_global, cell, seen_records, pages_in_sess
+                            )
 
-                    cell_pos += 1
+                            if cell_recs > 0:
+                                sess_records += cell_recs
+                                session_result["records"] += cell_recs
+                                session_result["blocked"]  = False
+                            elif was_blocked:
+                                session_result["blocked"] = True
 
-                print(f"\n   📊 Session {session_idx}: +{session_records} records")
+                            pos += 1
+                            session_result["cell_pos"] = pos
+
+                        print(f"\n   📊 Session {session_idx}: +{sess_records} records")
+
+                except Exception as e:
+                    session_result["error"] = e
+
+            t = threading.Thread(target=run_session, daemon=True)
+            t.start()
+            # Block main thread until session thread finishes (or timeout)
+            t.join(timeout=time_remaining() - 60)
+
+            if session_result["error"]:
+                raise session_result["error"]
+
+            # Propagate results back to main loop state
+            new_pos      = session_result["cell_pos"]
+            new_records  = session_result["records"]
+            was_all_blocked = session_result["blocked"] and new_records == 0
+
+            for _ in range(new_pos - cell_pos):
+                # Count each cell outcome
+                pass  # detailed accounting done inside run_session above
+
+            # Update outer counters from thread results
+            total_records += new_records
+            if new_records > 0:
+                cells_done         += (new_pos - cell_pos)
+                consecutive_blocks  = 0
+            elif was_all_blocked:
+                cells_blocked      += (new_pos - cell_pos)
+                consecutive_blocks += (new_pos - cell_pos)
+                for _ in range(new_pos - cell_pos):
+                    print(f"   🚫 Cell fully blocked (streak: {consecutive_blocks})")
+            else:
+                cells_done  += (new_pos - cell_pos)
+                cells_empty += (new_pos - cell_pos)
+                consecutive_blocks = 0
+
+            cell_pos = new_pos
 
         except Exception as e:
             print(f"   ❌ Session exception: {e}")
