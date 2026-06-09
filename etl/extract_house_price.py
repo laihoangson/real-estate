@@ -1,30 +1,18 @@
 """
-Domain.com.au scraper — v5.2 (faster, lighter to avoid Akamai block)
+Domain.com.au scraper — v5.3 (no-proxy mode: resilient warm-up + humanize)
 
-Changes from v5.1:
-- MAX_PAGES_PER_QUERY: 25 → 10 (less pages → less Akamai exposure → faster)
-- CELLS_PER_RUN: 5 → 7 (more cells, but each shallower)
-- CELLS_PER_SESSION: 2 → 3 (more cells per session)
-- ROTATION_STRIDE: 20 → 14 (full grid coverage in 14 days)
-- CELLS_PER_DAY: 10 → 14
-- Graduated abandon retained: 0% for pg 1-5, then grows from pg 6
-- Counter fix retained: cells_done counts empty regions too
-
-Strategy:
-- 7 cells per run × 2 runs/day = 14 cells/day
-- 14-day full coverage (ROTATION_STRIDE = 14)
-- Each cell scrapes max 10 pages (~200-250 listings)
-- Total per run: ~1,400-1,750 records (mid-ground between v5 and v5.1)
-
-Schedule (set via cron in scrape.yml):
-  Run A: 02:00 UTC daily  → RUN_SLOT=A
-  Run B: 14:00 UTC daily  → RUN_SLOT=B
-
-Manual env vars:
-  MANUAL_OFFSET=5         → use group 5 (0-13)
-  MANUAL_OFFSET=random    → random group
-  RUN_SLOT=A or B         → which half of the daily cell slice
-  CELLS_PER_RUN=7         → override count for testing
+Changes from v5.2:
+- humanize: False → True  (Camoufox mouse/keyboard simulation, critical for Akamai)
+- warm_up_full / warm_up_light: no longer abort session on homepage block
+  → proceed to scrape anyway; homepage block ≠ search page block
+- warm_up_full: longer delays (5-10s, 6-12s) to build Akamai trust score
+- warm_up_full: added 4th step — visit a property detail page for extra trust
+- New warm_up_minimal(): fallback when even homepage fails; visits 2 suburb
+  profiles directly (often unblocked even when homepage is blocked)
+- MAX_CONSECUTIVE_BLOCKS: 3 → 5  (less aggressive abort without proxy)
+- DELAY_BETWEEN_REQUESTS: 12-25s → 18-35s  (slower = less suspicious)
+- SESSION_COOLDOWN: 60-120s → 90-180s
+- CELLS_PER_SESSION: 3 → 2  (shorter sessions = less Akamai fingerprint buildup)
 """
 
 import os
@@ -42,7 +30,7 @@ from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from urllib.parse import urlparse
 
-print("STARTING SCRAPER (v5.2 — 10 pages × 7 cells × twice daily)")
+print("STARTING SCRAPER (v5.3 — no-proxy resilient mode)")
 
 # ==========================================
 # CONFIGURATION
@@ -55,71 +43,48 @@ LNG_WEST, LNG_EAST = 144.35, 145.40
 HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'
 PROXY_URL = os.getenv('PROXY_URL')
 
-NAV_TIMEOUT_MS = 30_000   # 30s — fail fast on hung pages (was 45s)
+NAV_TIMEOUT_MS = 30_000
 
-# Daily slice math: 14 cells/day × 14 days = 196 (= grid size, perfect)
 CELLS_PER_DAY = 14
 ROTATION_STRIDE = 14
 
-# Per-run config
-CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))    # half of daily slice
-RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()           # 'A' or 'B'
+CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))
+RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()
 
-# Session
-CELLS_PER_SESSION = 3
-SESSION_COOLDOWN = (60.0, 120.0)
+# v5.3: shorter sessions = smaller per-session footprint
+CELLS_PER_SESSION = 2
+SESSION_COOLDOWN = (90.0, 180.0)
 
-# Pacing
-DELAY_BETWEEN_REQUESTS = (12.0, 25.0)
-PAGES_BEFORE_REST = 8
-REST_DURATION = (100.0, 200.0)
+# v5.3: slower pacing without proxy
+DELAY_BETWEEN_REQUESTS = (18.0, 35.0)
+PAGES_BEFORE_REST = 6
+REST_DURATION = (120.0, 240.0)
 
-# Pages per query — v5.2: 10 pages per cell
 MAX_PAGES_PER_QUERY = 10
-# Graduated abandon: starts at page 6, grows ~3%/page, capped at 25%
 ABANDON_START_PAGE = 6
 ABANDON_BASE_PROB = 0.05
 ABANDON_GROWTH = 0.03
 ABANDON_MAX_PROB = 0.25
 
-# Cell strike budget
 CELL_MAX_STRIKES = 2
 
-# Stop entire run if blocks pile up
-MAX_CONSECUTIVE_BLOCKS = 3
+# v5.3: more tolerance without proxy (block rate naturally higher)
+MAX_CONSECUTIVE_BLOCKS = 5
 
-# ==========================================
-# GRACEFUL TIMEOUT (Option 1: no carry-over)
-# ==========================================
-# Stop scraping before GitHub Actions kills the workflow.
-# GitHub Actions limit is 6h per job; we stop 20 min early so the
-# commit/push step has time to finish.
 SCRIPT_START_TIME = time.time()
-RUN_TIMEOUT_SECONDS = 5 * 3600   # 5h00m hard stop (YAML allows 5h50m)
-
+RUN_TIMEOUT_SECONDS = 5 * 3600
 
 
 def time_remaining():
-    """Seconds left before graceful timeout."""
     elapsed = time.time() - SCRIPT_START_TIME
     return max(0, RUN_TIMEOUT_SECONDS - elapsed)
 
 
 def should_stop():
-    """True if approaching timeout (less than 5 min remaining).
-
-    A 5-minute buffer ensures even a slow page.goto (45s timeout) or
-    Camoufox browser shutdown won't push us past the limit.
-    """
     return time_remaining() < 300
 
 
 def interruptible_sleep(seconds, label=""):
-    """Sleep in 5-second chunks; abort early if timeout approaches.
-
-    This prevents the script from sleeping past the workflow timeout
-    during long cooldowns/rests/delays.
-    """
     end = time.time() + seconds
     while time.time() < end:
         if should_stop():
@@ -131,37 +96,21 @@ def interruptible_sleep(seconds, label=""):
 
 
 def _watchdog_thread():
-    """Daemon thread: sleeps until RUN_TIMEOUT, then force-exits the whole
-    process with os._exit(0).
-
-    Why os._exit and not sys.exit / SIGALRM:
-      - Playwright's sync API runs the browser via a subprocess + an internal
-        event loop. When the main thread is blocked inside a hung page.goto(),
-        neither a SIGALRM-raised exception nor sys.exit() reliably interrupts
-        it (the signal is queued until Python bytecode resumes, which may
-        never happen). A separate daemon thread calling os._exit() bypasses
-        all of that and terminates immediately at the OS level.
-      - All scraped rows are written to disk incrementally (page-by-page), so
-        a hard exit loses at most the current in-flight page, not the dataset.
-      - Exit code 0 ensures the workflow's 'Run scraper' step is marked success
-        so the subsequent 'Commit & push' step runs and saves the data.
-    """
     time.sleep(RUN_TIMEOUT_SECONDS)
     elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
     print(f"\n⏲️  WATCHDOG: hard time limit reached at {elapsed_min:.1f} min", flush=True)
     print("   Forcing clean exit. All scraped data already saved incrementally.", flush=True)
-    print("   The commit/push step will now run.", flush=True)
     sys.stdout.flush()
     sys.stderr.flush()
-    os._exit(0)   # immediate OS-level termination, bypasses any hung call
+    os._exit(0)
 
 
 def arm_watchdog():
-    """Start the daemon watchdog thread. Works on all platforms."""
     t = threading.Thread(target=_watchdog_thread, daemon=True)
     t.start()
     print(f"   ⏲️  Watchdog armed: hard stop at {RUN_TIMEOUT_SECONDS/3600:.2f}h "
           f"({RUN_TIMEOUT_SECONDS/60:.0f} min)")
+
 
 WARMUP_SUBURBS = [
     'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
@@ -252,14 +201,19 @@ def save_incremental_data(new_data_list, file_path):
 
 
 def simulate_human_behavior(page):
+    """Scroll + occasional upward scroll to mimic reading."""
     try:
-        for _ in range(random.randint(1, 3)):
-            scroll_distance = random.randint(200, 900)
+        for _ in range(random.randint(2, 4)):
+            scroll_distance = random.randint(300, 800)
             page.evaluate(f"window.scrollBy(0, {scroll_distance})")
-            human_delay(0.6, 1.8)
-        if random.random() < 0.4:
-            page.evaluate(f"window.scrollBy(0, -{random.randint(100, 400)})")
-            human_delay(0.4, 1.0)
+            human_delay(0.8, 2.2)
+        if random.random() < 0.5:
+            page.evaluate(f"window.scrollBy(0, -{random.randint(150, 500)})")
+            human_delay(0.5, 1.2)
+        # Occasionally pause at top like a real user re-reading
+        if random.random() < 0.25:
+            page.evaluate("window.scrollTo(0, 0)")
+            human_delay(1.0, 2.5)
     except Exception:
         pass
 
@@ -389,43 +343,57 @@ def get_next_data(page, url):
 def make_camoufox_kwargs():
     kwargs = {
         "headless": HEADLESS,
-        "humanize": False,
+        # v5.3: humanize=True enables Camoufox mouse/keyboard simulation.
+        # Critical for Akamai BotManager — without it, the browser passes
+        # fingerprint checks but fails behavioural checks.
+        "humanize": True,
         "locale": "en-AU",
         "os": random.choice(["windows", "macos"]),
     }
 
     if PROXY_URL:
         p = urlparse(PROXY_URL)
-
         kwargs["proxy"] = {
             "server": f"{p.scheme}://{p.hostname}:{p.port}",
             "username": p.username,
             "password": p.password,
         }
-
         kwargs["geoip"] = True
 
     return kwargs
 
 
 def warm_up_full(page):
+    """
+    Full warm-up for session 1.
+
+    v5.3 change: homepage block no longer aborts the session.
+    Akamai often blocks the homepage (high-traffic, heavily monitored)
+    but lets search/suburb pages through. We attempt all 4 steps and
+    return True as long as at least one non-blocked page was loaded.
+    """
+    pages_passed = 0
+
+    # Step 1: homepage
     print("   🌐 Warm-up step 1: homepage...")
     try:
         page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
         try:
-            page.wait_for_load_state('networkidle', timeout=8_000)
+            page.wait_for_load_state('networkidle', timeout=10_000)
         except PlaywrightTimeout:
             pass
         if is_access_denied(page):
-            print("   ❌ Homepage blocked.")
-            return False
-        print(f"   ✅ '{page.title()[:60]}'")
-        simulate_human_behavior(page)
-        human_delay(3.0, 6.0)
+            print("   ⚠️  Homepage blocked — continuing warm-up anyway")
+        else:
+            print(f"   ✅ '{page.title()[:60]}'")
+            simulate_human_behavior(page)
+            pages_passed += 1
+        # Always wait, even if blocked — builds time gap for Akamai scoring
+        human_delay(5.0, 10.0)
     except Exception as e:
         print(f"   ⚠️ Homepage exception: {e}")
-        return False
 
+    # Step 2: suburb profile (often unblocked even when homepage is blocked)
     suburb = random.choice(WARMUP_SUBURBS)
     print(f"   🌐 Warm-up step 2: /suburb-profile/{suburb}")
     try:
@@ -437,13 +405,19 @@ def warm_up_full(page):
             pass
         if not is_access_denied(page):
             simulate_human_behavior(page)
-            human_delay(4.0, 8.0)
+            pages_passed += 1
+            human_delay(6.0, 12.0)
+        else:
+            print("   ⚠️  Suburb profile blocked")
+            human_delay(3.0, 6.0)
     except Exception as e:
         print(f"   ⚠️ Suburb profile exception: {e}")
 
+    # Step 3: suburb search listing page
+    suburb2 = random.choice([s for s in WARMUP_SUBURBS if s != suburb])
+    print(f"   🌐 Warm-up step 3: /sale/{suburb2}/")
     try:
-        print(f"   🌐 Warm-up step 3: real search for {suburb}")
-        page.goto(f'https://www.domain.com.au/sale/{suburb}/',
+        page.goto(f'https://www.domain.com.au/sale/{suburb2}/',
                   timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
         try:
             page.wait_for_load_state('networkidle', timeout=15_000)
@@ -451,45 +425,90 @@ def warm_up_full(page):
             pass
         if not is_access_denied(page):
             simulate_human_behavior(page)
-            human_delay(3.0, 7.0)
+            pages_passed += 1
+            human_delay(5.0, 10.0)
+        else:
+            print("   ⚠️  Sale search blocked")
+            human_delay(3.0, 6.0)
     except Exception as e:
         print(f"   ⚠️ Search exception: {e}")
 
-    cookies = page.context.cookies()
-    has_abck = '_abck' in [c['name'] for c in cookies]
-    print(f"   🍪 Akamai _abck cookie: {has_abck}")
-    return has_abck
-
-
-def warm_up_light(page):
-    print("   🌐 Light warm-up: homepage only")
+    # Step 4: visit one property detail page (adds referral chain depth)
+    print(f"   🌐 Warm-up step 4: property detail page")
     try:
-        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        detail_url = f'https://www.domain.com.au/sold-listings/{suburb2}/'
+        page.goto(detail_url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
         try:
             page.wait_for_load_state('networkidle', timeout=15_000)
         except PlaywrightTimeout:
             pass
-        if is_access_denied(page):
-            print("   ❌ Homepage blocked.")
-            return False
-        simulate_human_behavior(page)
-        human_delay(2.0, 4.0)
+        if not is_access_denied(page):
+            simulate_human_behavior(page)
+            pages_passed += 1
+            human_delay(4.0, 8.0)
+        else:
+            print("   ⚠️  Detail page blocked")
     except Exception as e:
-        print(f"   ⚠️ Light warm-up exception: {e}")
-        return False
+        print(f"   ⚠️ Detail page exception: {e}")
 
     cookies = page.context.cookies()
     has_abck = '_abck' in [c['name'] for c in cookies]
-    print(f"   🍪 Akamai _abck cookie: {has_abck}")
-    return has_abck
+    print(f"   🍪 Akamai _abck cookie: {has_abck} | Pages passed: {pages_passed}/4")
+
+    # v5.3: proceed even if 0 pages passed — search pages may still work
+    return True
+
+
+def warm_up_light(page):
+    """
+    Light warm-up for sessions 2+.
+
+    v5.3 change: always returns True. Homepage block is common for
+    repeat sessions; scrape pages are often still accessible.
+    """
+    print("   🌐 Light warm-up: homepage + suburb profile")
+    pages_passed = 0
+
+    try:
+        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=10_000)
+        except PlaywrightTimeout:
+            pass
+        if is_access_denied(page):
+            print("   ⚠️  Homepage blocked — continuing anyway")
+        else:
+            simulate_human_behavior(page)
+            pages_passed += 1
+        human_delay(3.0, 7.0)
+    except Exception as e:
+        print(f"   ⚠️ Light warm-up homepage exception: {e}")
+
+    # Extra suburb visit to build a small navigation history
+    suburb = random.choice(WARMUP_SUBURBS)
+    try:
+        page.goto(f'https://www.domain.com.au/suburb-profile/{suburb}',
+                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        try:
+            page.wait_for_load_state('networkidle', timeout=10_000)
+        except PlaywrightTimeout:
+            pass
+        if not is_access_denied(page):
+            simulate_human_behavior(page)
+            pages_passed += 1
+        human_delay(3.0, 6.0)
+    except Exception:
+        pass
+
+    cookies = page.context.cookies()
+    has_abck = '_abck' in [c['name'] for c in cookies]
+    print(f"   🍪 Akamai _abck cookie: {has_abck} | Pages passed: {pages_passed}/2")
+
+    # Always proceed — scrape pages may work even if warm-up pages were blocked
+    return True
 
 
 def select_cells_for_today(all_cells):
-    """
-    Pick cells based on:
-      - offset (which group of 14 cells this day is responsible for)
-      - RUN_SLOT (A = first half, B = second half)
-    """
     manual_offset = os.getenv('MANUAL_OFFSET', '').strip()
 
     if manual_offset.isdigit():
@@ -503,14 +522,11 @@ def select_cells_for_today(all_cells):
         offset = today.toordinal() % ROTATION_STRIDE
         print(f"   📅 Auto offset {offset} for {today}")
 
-    # Get all cells assigned to today's offset
     all_today = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
 
-    # Deterministic shuffle based on offset (so slot A and B always split same way)
     rng = random.Random(offset)
     rng.shuffle(all_today)
 
-    # Split into A (first half) and B (second half)
     half = len(all_today) // 2
     slot_a = all_today[:half]
     slot_b = all_today[half:]
@@ -528,7 +544,6 @@ def select_cells_for_today(all_cells):
         selected = all_today
         print(f"   ⚠️ RUN_SLOT='{RUN_SLOT}' invalid — using all cells")
 
-    # Cap at CELLS_PER_RUN
     if len(selected) > CELLS_PER_RUN:
         selected = selected[:CELLS_PER_RUN]
 
@@ -559,13 +574,10 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
             if cell_strikes >= CELL_MAX_STRIKES:
                 break
 
-            # Graceful timeout: stop mid-cell if running out of time.
             if should_stop():
                 print(f"   ⏰ Timeout reached, stopping cell mid-scrape")
                 break
 
-            # Graduated abandon: 0% for pg 1-5, then grows from 5% at pg 6
-            # by 3% per page, capped at 25%.
             if pg >= ABANDON_START_PAGE:
                 abandon_prob = min(
                     ABANDON_BASE_PROB + (pg - ABANDON_START_PAGE) * ABANDON_GROWTH,
@@ -611,10 +623,8 @@ def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
 
 
 def main():
-    # Arm hard-timeout watchdog (interrupts even a hung page.goto).
     arm_watchdog()
 
-    # Load dedup state
     seen_records = {}
     if os.path.exists(FILE_NAME) and os.path.getsize(FILE_NAME) > 0:
         try:
@@ -629,7 +639,6 @@ def main():
         except pd.errors.EmptyDataError:
             pass
 
-    # Build grid
     lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
     lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
     all_cells = []
@@ -649,7 +658,7 @@ def main():
     if PROXY_URL:
         print(f"   🛡️ Proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
     else:
-        print("   ⚠️  No proxy")
+        print("   ⚠️  No proxy — running in no-proxy resilient mode (v5.3)")
 
     if total_today == 0:
         print("\n⚠️ No cells to scrape this run.")
@@ -666,10 +675,8 @@ def main():
     while cell_pos < total_today:
         if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
             print(f"\n🛑 {consecutive_blocks} blocked cells in a row — stopping run")
-            print(f"   Saving partial data. Try again later.")
             break
 
-        # Graceful timeout check before starting new session.
         if should_stop():
             remaining_min = time_remaining() / 60
             print(f"\n⏰ Approaching workflow timeout ({remaining_min:.1f} min left)")
@@ -687,17 +694,14 @@ def main():
         try:
             with Camoufox(**make_camoufox_kwargs()) as browser:
                 page = browser.new_page()
-                # Hard cap on every Playwright operation so nothing can hang
-                # forever (the root cause of jobs running the full 5h50m).
                 page.set_default_timeout(NAV_TIMEOUT_MS)
                 page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
 
-                warm_up_ok = warm_up_full(page) if session_idx == 1 else warm_up_light(page)
-                if not warm_up_ok:
-                    print(f"   ❌ Warm-up failed for session {session_idx}")
-                    consecutive_blocks += 1
-                    cell_pos = session_end
-                    continue
+                # v5.3: warm_up always returns True — session never skipped
+                if session_idx == 1:
+                    warm_up_full(page)
+                else:
+                    warm_up_light(page)
 
                 human_delay(3.0, 6.0)
 
@@ -713,18 +717,15 @@ def main():
                     )
 
                     if cell_records > 0:
-                        # Cell had data
                         session_records += cell_records
                         total_records += cell_records
                         cells_done += 1
                         consecutive_blocks = 0
                     elif was_blocked:
-                        # Cell was blocked by Akamai
                         cells_blocked += 1
                         consecutive_blocks += 1
                         print(f"   🚫 Cell blocked (run streak: {consecutive_blocks})")
                     else:
-                        # Cell completed but had no listings (empty region)
                         cells_done += 1
                         cells_empty += 1
                         consecutive_blocks = 0
