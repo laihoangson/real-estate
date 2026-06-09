@@ -1,18 +1,45 @@
 """
-Domain.com.au scraper — v5.3 (no-proxy mode: resilient warm-up + humanize)
+Domain.com.au scraper — v5.4 (Akamai trust-building + adaptive backoff)
 
-Changes from v5.2:
-- humanize: False → True  (Camoufox mouse/keyboard simulation, critical for Akamai)
-- warm_up_full / warm_up_light: no longer abort session on homepage block
-  → proceed to scrape anyway; homepage block ≠ search page block
-- warm_up_full: longer delays (5-10s, 6-12s) to build Akamai trust score
-- warm_up_full: added 4th step — visit a property detail page for extra trust
-- New warm_up_minimal(): fallback when even homepage fails; visits 2 suburb
-  profiles directly (often unblocked even when homepage is blocked)
-- MAX_CONSECUTIVE_BLOCKS: 3 → 5  (less aggressive abort without proxy)
-- DELAY_BETWEEN_REQUESTS: 12-25s → 18-35s  (slower = less suspicious)
-- SESSION_COOLDOWN: 60-120s → 90-180s
-- CELLS_PER_SESSION: 3 → 2  (shorter sessions = less Akamai fingerprint buildup)
+Root cause from v5.3 runs:
+  - _abck cookie obtained on homepage (fingerprint OK)
+  - But suburb-profile / sale / sold pages ALL blocked → behavioural trust score ≈ 0
+  - Scraper then hits search cells immediately with low trust → 100% block rate
+
+v5.4 changes vs v5.3:
+────────────────────────────────────────────────────────────
+WARM-UP
+  - warm_up_full: new strategy — use known-unblocked lightweight pages
+    (/education/buying, /news, /suburb-profile pages with simpler JS)
+    to accumulate trust BEFORE hitting search endpoints
+  - Added warm_up_probe(): after warm-up, silently test 1 search URL;
+    if blocked, run extra trust-building round (max 2 retries) before
+    committing to the session
+  - Warm-up now does real scrolling + random mouse moves via page.mouse
+    (Akamai BotManager checks mouse entropy, not just presence of _abck)
+  - Min warm-up time enforced: 45s for full, 20s for light
+
+RETRY / BACKOFF
+  - Per-cell exponential backoff: after a block, wait 30–90s before
+    retrying the SAME page (max 2 retries per page)
+  - Block strike resets to 0 after any successful page in a cell
+    (v5.3 strikes were cell-level, never reset mid-cell)
+
+CELL SELECTION
+  - Cells sorted by lng column then shuffled within column groups →
+    avoids hitting the same lng band (144.875–144.95) every run
+  - Added jitter: 20% chance to swap to an adjacent cell at runtime
+
+REQUESTS
+  - Merged For Sale + Sold into interleaved single-cell scan:
+    alternates modes per page rather than exhausting one mode first
+    → halves the number of "mode switches" Akamai can fingerprint
+  - Random query param order per request (cosmetic but adds entropy)
+
+TIMING
+  - DELAY_BETWEEN_REQUESTS: 18-35s → 25-50s (higher baseline)
+  - Added BLOCK_RECOVERY_SLEEP: 45-90s after any block before next req
+  - SESSION_COOLDOWN: 90-180s → 120-240s
 """
 
 import os
@@ -30,7 +57,7 @@ from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from urllib.parse import urlparse
 
-print("STARTING SCRAPER (v5.3 — no-proxy resilient mode)")
+print("STARTING SCRAPER (v5.4 — Akamai trust-building + adaptive backoff)")
 
 # ==========================================
 # CONFIGURATION
@@ -38,51 +65,52 @@ print("STARTING SCRAPER (v5.3 — no-proxy resilient mode)")
 FILE_NAME = 'data/melbourne_price_data.csv'
 GRID_SIZE = 14
 LAT_NORTH, LAT_SOUTH = -37.5, -38.5
-LNG_WEST, LNG_EAST = 144.35, 145.40
+LNG_WEST, LNG_EAST   = 144.35, 145.40
 
-HEADLESS = os.getenv('HEADLESS', 'false').lower() == 'true'
+HEADLESS  = os.getenv('HEADLESS', 'false').lower() == 'true'
 PROXY_URL = os.getenv('PROXY_URL')
 
-NAV_TIMEOUT_MS = 30_000
+NAV_TIMEOUT_MS = 35_000
 
-CELLS_PER_DAY = 14
-ROTATION_STRIDE = 14
+CELLS_PER_DAY    = 14
+ROTATION_STRIDE  = 14
 
 CELLS_PER_RUN = int(os.getenv('CELLS_PER_RUN', '7'))
-RUN_SLOT = os.getenv('RUN_SLOT', 'A').upper()
+RUN_SLOT      = os.getenv('RUN_SLOT', 'A').upper()
 
-# v5.3: shorter sessions = smaller per-session footprint
-CELLS_PER_SESSION = 2
-SESSION_COOLDOWN = (90.0, 180.0)
+# v5.4: shorter sessions + longer cooldowns
+CELLS_PER_SESSION  = 2
+SESSION_COOLDOWN   = (120.0, 240.0)
 
-# v5.3: slower pacing without proxy
-DELAY_BETWEEN_REQUESTS = (18.0, 35.0)
-PAGES_BEFORE_REST = 6
-REST_DURATION = (120.0, 240.0)
+# v5.4: slower pacing
+DELAY_BETWEEN_REQUESTS = (25.0, 50.0)
+BLOCK_RECOVERY_SLEEP   = (45.0, 90.0)   # NEW: extra sleep after any block
+PAGES_BEFORE_REST      = 5
+REST_DURATION          = (150.0, 280.0)
 
-MAX_PAGES_PER_QUERY = 10
-ABANDON_START_PAGE = 6
-ABANDON_BASE_PROB = 0.05
-ABANDON_GROWTH = 0.03
-ABANDON_MAX_PROB = 0.25
+MAX_PAGES_PER_QUERY    = 10
+ABANDON_START_PAGE     = 5
+ABANDON_BASE_PROB      = 0.07
+ABANDON_GROWTH         = 0.04
+ABANDON_MAX_PROB       = 0.30
 
-CELL_MAX_STRIKES = 2
-
-# v5.3: more tolerance without proxy (block rate naturally higher)
+CELL_MAX_STRIKES       = 3              # v5.4: increased from 2
+MAX_PAGE_RETRIES       = 2              # NEW: per-page retry after block
 MAX_CONSECUTIVE_BLOCKS = 5
+
+# v5.4: minimum warm-up time budget (seconds)
+MIN_WARMUP_FULL_SECS   = 45
+MIN_WARMUP_LIGHT_SECS  = 20
 
 SCRIPT_START_TIME = time.time()
 RUN_TIMEOUT_SECONDS = 5 * 3600
 
 
 def time_remaining():
-    elapsed = time.time() - SCRIPT_START_TIME
-    return max(0, RUN_TIMEOUT_SECONDS - elapsed)
-
+    return max(0, RUN_TIMEOUT_SECONDS - (time.time() - SCRIPT_START_TIME))
 
 def should_stop():
     return time_remaining() < 300
-
 
 def interruptible_sleep(seconds, label=""):
     end = time.time() + seconds
@@ -90,38 +118,55 @@ def interruptible_sleep(seconds, label=""):
         if should_stop():
             print(f"   ⏰ Interrupting sleep ({label}) — timeout approaching")
             return
-        chunk = min(5.0, end - time.time())
-        if chunk > 0:
-            time.sleep(chunk)
-
+        time.sleep(min(5.0, end - time.time()))
 
 def _watchdog_thread():
     time.sleep(RUN_TIMEOUT_SECONDS)
-    elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
-    print(f"\n⏲️  WATCHDOG: hard time limit reached at {elapsed_min:.1f} min", flush=True)
-    print("   Forcing clean exit. All scraped data already saved incrementally.", flush=True)
-    sys.stdout.flush()
-    sys.stderr.flush()
+    print(f"\n⏲️  WATCHDOG: hard stop at {(time.time()-SCRIPT_START_TIME)/60:.1f} min", flush=True)
+    sys.stdout.flush(); sys.stderr.flush()
     os._exit(0)
-
 
 def arm_watchdog():
     t = threading.Thread(target=_watchdog_thread, daemon=True)
     t.start()
-    print(f"   ⏲️  Watchdog armed: hard stop at {RUN_TIMEOUT_SECONDS/3600:.2f}h "
-          f"({RUN_TIMEOUT_SECONDS/60:.0f} min)")
+    print(f"   ⏲️  Watchdog armed: {RUN_TIMEOUT_SECONDS/3600:.2f}h")
 
 
+# ==========================================
+# WARM-UP PAGE POOLS
+# ==========================================
+
+# Tier 1: Very lightweight CMS/editorial pages — minimal JS, rarely blocked
+WARMUP_EDITORIAL = [
+    'https://www.domain.com.au/advice/buying/',
+    'https://www.domain.com.au/advice/renting/',
+    'https://www.domain.com.au/advice/selling/',
+    'https://www.domain.com.au/news/',
+    'https://www.domain.com.au/research/',
+    'https://www.domain.com.au/guides/home-loans/',
+    'https://www.domain.com.au/advice/investing/',
+]
+
+# Tier 2: Suburb profiles (moderate JS, sometimes blocked but often OK)
 WARMUP_SUBURBS = [
-    'richmond-vic-3121', 'st-kilda-vic-3182', 'brunswick-vic-3056',
-    'fitzroy-vic-3065', 'south-yarra-vic-3141', 'carlton-vic-3053',
-    'footscray-vic-3011', 'brighton-vic-3186', 'hawthorn-vic-3122',
-    'prahran-vic-3181', 'collingwood-vic-3066', 'northcote-vic-3070',
+    'richmond-vic-3121', 'st-kilda-vic-3182',  'brunswick-vic-3056',
+    'fitzroy-vic-3065',  'south-yarra-vic-3141','carlton-vic-3053',
+    'footscray-vic-3011','brighton-vic-3186',   'hawthorn-vic-3122',
+    'prahran-vic-3181',  'collingwood-vic-3066','northcote-vic-3070',
+    'moonee-ponds-vic-3039', 'essendon-vic-3040',
+]
+
+# Tier 3: Low-traffic suburb sale pages (light search, sometimes accessible
+# even when main search endpoints are blocked)
+WARMUP_SALE_LIGHT = [
+    'https://www.domain.com.au/sale/footscray-vic-3011/?bedrooms=3-any',
+    'https://www.domain.com.au/sale/brunswick-vic-3056/?bedrooms=2-any',
+    'https://www.domain.com.au/sale/essendon-vic-3040/?bedrooms=3-any',
 ]
 
 SEARCH_MODES = [
-    ('For Sale', 'sale', 'excludeunderoffer=1'),
-    ('Sold', 'sold-listings', ''),
+    ('For Sale', 'sale',           'excludeunderoffer=1'),
+    ('Sold',     'sold-listings',  ''),
 ]
 
 
@@ -143,12 +188,10 @@ def parse_raw_price(raw_price):
     for val_str in matches:
         mult = 1
         if val_str.endswith('m'):
-            mult = 1_000_000
-            val_str = val_str[:-1]
+            mult = 1_000_000; val_str = val_str[:-1]
         elif val_str.endswith('k'):
             num = float(val_str[:-1])
-            if num < 1000:
-                mult = 1000
+            if num < 1000: mult = 1000
             val_str = val_str[:-1]
         try:
             parsed_vals.append(float(val_str) * mult)
@@ -168,12 +211,11 @@ def calculate_distance_to_cbd(lat2, lon2):
         return np.nan
     lat1, lon1 = -37.8136, 144.9631
     R = 6371.0
-    lat1_rad, lon1_rad = math.radians(lat1), math.radians(lon1)
-    lat2_rad, lon2_rad = math.radians(lat2), math.radians(lon2)
-    dlon, dlat = lon2_rad - lon1_rad, lat2_rad - lat1_rad
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return round(R * c, 2)
+    lat1r, lon1r = math.radians(lat1), math.radians(lon1)
+    lat2r, lon2r = math.radians(lat2), math.radians(lon2)
+    dlon = lon2r - lon1r; dlat = lat2r - lat1r
+    a = math.sin(dlat/2)**2 + math.cos(lat1r)*math.cos(lat2r)*math.sin(dlon/2)**2
+    return round(R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a)), 2)
 
 
 def human_delay(min_sec, max_sec):
@@ -190,8 +232,7 @@ def save_incremental_data(new_data_list, file_path):
             df_old = pd.read_csv(file_path)
             df_combined = pd.concat([df_old, df_new], ignore_index=True)
             df_final = df_combined.drop_duplicates(subset=['Property_ID'], keep='last')
-            suburb_counts = df_final.groupby('Suburb')['Property_ID'].transform('count')
-            df_final['Propertycount'] = suburb_counts
+            df_final['Propertycount'] = df_final.groupby('Suburb')['Property_ID'].transform('count')
             df_final.to_csv(file_path, index=False, encoding='utf-8-sig')
         except pd.errors.EmptyDataError:
             df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
@@ -200,105 +241,52 @@ def save_incremental_data(new_data_list, file_path):
         df_new.to_csv(file_path, index=False, encoding='utf-8-sig')
 
 
-def simulate_human_behavior(page):
-    """Scroll + occasional upward scroll to mimic reading."""
+def simulate_human_behavior(page, intensity="normal"):
+    """
+    Scroll + mouse movement to build Akamai behavioural trust score.
+    intensity='deep' does more scrolling — used during warm-up.
+    """
     try:
-        for _ in range(random.randint(2, 4)):
-            scroll_distance = random.randint(300, 800)
-            page.evaluate(f"window.scrollBy(0, {scroll_distance})")
-            human_delay(0.8, 2.2)
+        # Get page dimensions
+        dims = page.evaluate(
+            "() => ({w: document.body.scrollWidth || 1200, "
+            "        h: document.body.scrollHeight || 3000, "
+            "        vh: window.innerHeight || 768})"
+        )
+        page_h = dims.get('h', 3000)
+        vw = dims.get('w', 1200)
+
+        n_scrolls = random.randint(3, 6) if intensity == "deep" else random.randint(2, 4)
+
+        for i in range(n_scrolls):
+            scroll_y = random.randint(250, 700)
+            page.evaluate(f"window.scrollBy(0, {scroll_y})")
+            human_delay(0.6, 1.8)
+
+            # Occasionally move mouse to simulate reading
+            if random.random() < 0.6:
+                mx = random.randint(100, min(vw - 100, 1100))
+                my = random.randint(100, 600)
+                try:
+                    page.mouse.move(mx, my)
+                    human_delay(0.2, 0.7)
+                except Exception:
+                    pass
+
+        # Scroll back up partially (mimics re-reading)
         if random.random() < 0.5:
-            page.evaluate(f"window.scrollBy(0, -{random.randint(150, 500)})")
-            human_delay(0.5, 1.2)
-        # Occasionally pause at top like a real user re-reading
-        if random.random() < 0.25:
-            page.evaluate("window.scrollTo(0, 0)")
+            page.evaluate(f"window.scrollBy(0, -{random.randint(200, 600)})")
+            human_delay(0.5, 1.5)
+
+        # Deep: scroll to bottom then pause
+        if intensity == "deep" and random.random() < 0.4:
+            page.evaluate(f"window.scrollTo(0, {min(page_h, 4000)})")
             human_delay(1.0, 2.5)
+            page.evaluate("window.scrollTo(0, 0)")
+            human_delay(0.8, 1.5)
+
     except Exception:
         pass
-
-
-def parse_listings_payload(payload, status_label, seen_records):
-    props = payload.get('props', {}).get('pageProps', {}).get('componentProps', {})
-    listings = props.get('listingsMap', {})
-    total_pages = props.get('totalPages', 1)
-    records = []
-
-    for pid, item in listings.items():
-        pid_str = str(pid)
-        m = item.get('listingModel', {})
-        raw_price = str(m.get('price', 'N/A'))
-
-        if pid_str in seen_records:
-            old = seen_records[pid_str]
-            if old['Status'] == status_label and old['Price'] == raw_price:
-                continue
-
-        a = m.get('address', {})
-        f = m.get('features', {})
-        street = a.get('street', 'N/A')
-        suburb = str(a.get('suburb', 'Map Area')).upper()
-        postcode = a.get('postcode', '')
-        url_path = m.get('url', '')
-        lat = a.get('lat', m.get('geolocation', {}).get('latitude'))
-        lng = a.get('lng', m.get('geolocation', {}).get('longitude'))
-
-        full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
-        if not full_address:
-            continue
-
-        date_val = m.get('dateSold', m.get('dateListed'))
-        if not date_val:
-            date_val = m.get('status', {}).get('date')
-        if not date_val:
-            item_str = json.dumps(item)
-            date_match = re.search(r'([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', item_str)
-            if date_match:
-                date_val = date_match.group(1)
-            else:
-                iso_match = re.search(r'"[A-Za-z]*[dD]ate[A-Za-z]*"\s*:\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})', item_str)
-                if iso_match:
-                    date_val = iso_match.group(1)
-        if not date_val:
-            date_val = 'N/A'
-
-        full_url = f"https://www.domain.com.au{url_path}" if url_path else "N/A"
-
-        raw_land_size = f.get('landSize', np.nan)
-        land_unit = str(f.get('landUnit', '')).lower()
-        try:
-            if pd.notna(raw_land_size):
-                raw_land_size = float(raw_land_size)
-                if 'ha' in land_unit or 'hectare' in land_unit:
-                    raw_land_size = raw_land_size * 10000
-        except Exception:
-            pass
-
-        record = {
-            'Property_ID': pid_str,
-            'Status': status_label,
-            'Full_Address': full_address,
-            'Suburb': suburb,
-            'Postcode': postcode,
-            'Property_Type': f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
-            'Date': date_val,
-            'Beds': f.get('beds', 0),
-            'Baths': f.get('baths', 0),
-            'Car_Spaces': f.get('parking', f.get('carspaces', 0)),
-            'LandSize_sqm': raw_land_size,
-            'Propertycount': np.nan,
-            'Raw_Price': raw_price,
-            'Numeric_Price': parse_raw_price(raw_price),
-            'Latitude': lat,
-            'Longitude': lng,
-            'Distance_to_CBD_km': calculate_distance_to_cbd(lat, lng),
-            'URL': full_url,
-            'Last_Updated': pd.Timestamp.now().strftime('%Y-%m-%d'),
-        }
-        records.append(record)
-        seen_records[pid_str] = {'Status': status_label, 'Price': raw_price}
-
-    return records, total_pages
 
 
 def is_access_denied(page):
@@ -306,8 +294,14 @@ def is_access_denied(page):
         title = (page.title() or '').lower()
         if 'access denied' in title or 'pardon our interruption' in title:
             return True
-        body = page.evaluate("() => document.body ? document.body.innerText.slice(0, 300) : ''")
-        if 'access denied' in body.lower() or 'pardon our interruption' in body.lower():
+        body = page.evaluate(
+            "() => document.body ? document.body.innerText.slice(0, 400) : ''"
+        )
+        body_l = body.lower()
+        if 'access denied' in body_l or 'pardon our interruption' in body_l:
+            return True
+        # Akamai challenge page detection
+        if 'enable javascript' in body_l and len(body) < 500:
             return True
     except Exception:
         pass
@@ -315,12 +309,13 @@ def is_access_denied(page):
 
 
 def get_next_data(page, url):
+    """Navigate to URL and extract __NEXT_DATA__ JSON."""
     try:
         page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
     except (PlaywrightTimeout, Exception):
         return 'BLOCKED'
     try:
-        page.wait_for_load_state('networkidle', timeout=8_000)
+        page.wait_for_load_state('networkidle', timeout=10_000)
     except PlaywrightTimeout:
         pass
     if is_access_denied(page):
@@ -328,7 +323,8 @@ def get_next_data(page, url):
     simulate_human_behavior(page)
     try:
         content = page.evaluate(
-            "() => { const t = document.getElementById('__NEXT_DATA__'); return t ? t.textContent : null; }"
+            "() => { const t = document.getElementById('__NEXT_DATA__'); "
+            "return t ? t.textContent : null; }"
         )
     except Exception:
         return 'BLOCKED'
@@ -343,119 +339,106 @@ def get_next_data(page, url):
 def make_camoufox_kwargs():
     kwargs = {
         "headless": HEADLESS,
-        # v5.3: humanize=True enables Camoufox mouse/keyboard simulation.
-        # Critical for Akamai BotManager — without it, the browser passes
-        # fingerprint checks but fails behavioural checks.
         "humanize": True,
         "locale": "en-AU",
         "os": random.choice(["windows", "macos"]),
+        # v5.4: randomise viewport slightly to avoid fingerprint
+        "viewport": {
+            "width":  random.choice([1280, 1366, 1440, 1536]),
+            "height": random.choice([768, 800, 864, 900]),
+        },
     }
-
     if PROXY_URL:
         p = urlparse(PROXY_URL)
         kwargs["proxy"] = {
-            "server": f"{p.scheme}://{p.hostname}:{p.port}",
+            "server":   f"{p.scheme}://{p.hostname}:{p.port}",
             "username": p.username,
             "password": p.password,
         }
         kwargs["geoip"] = True
-
     return kwargs
 
 
-def warm_up_full(page):
-    """
-    Full warm-up for session 1.
+# ==========================================
+# WARM-UP FUNCTIONS (v5.4)
+# ==========================================
 
-    v5.3 change: homepage block no longer aborts the session.
-    Akamai often blocks the homepage (high-traffic, heavily monitored)
-    but lets search/suburb pages through. We attempt all 4 steps and
-    return True as long as at least one non-blocked page was loaded.
-    """
-    pages_passed = 0
-
-    # Step 1: homepage
-    print("   🌐 Warm-up step 1: homepage...")
+def _try_visit(page, url, label, intensity="normal"):
+    """Visit a URL. Return True if not blocked."""
     try:
-        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
+        page.goto(url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
         try:
             page.wait_for_load_state('networkidle', timeout=10_000)
         except PlaywrightTimeout:
             pass
         if is_access_denied(page):
-            print("   ⚠️  Homepage blocked — continuing warm-up anyway")
-        else:
-            print(f"   ✅ '{page.title()[:60]}'")
-            simulate_human_behavior(page)
-            pages_passed += 1
-        # Always wait, even if blocked — builds time gap for Akamai scoring
+            print(f"   ⚠️  Blocked: {label}")
+            return False
+        print(f"   ✅ OK: {label[:70]}")
+        simulate_human_behavior(page, intensity=intensity)
+        return True
+    except Exception as e:
+        print(f"   ⚠️  Exception ({label[:50]}): {e}")
+        return False
+
+
+def warm_up_full(page):
+    """
+    Full warm-up strategy for session 1.
+
+    Priority order (most → least likely to succeed without proxy):
+      1. Homepage                    — builds initial cookie
+      2. Editorial/advice pages      — low JS, rarely blocked
+      3. Suburb profile              — moderate JS
+      4. Light sale suburb page      — tests search proximity
+      5. Probe (warm_up_probe)       — confirm search is accessible
+
+    v5.4: enforces minimum 45s budget; keeps trying next tier if blocked.
+    """
+    t_start    = time.time()
+    pages_ok   = 0
+
+    # Step 1: homepage (builds _abck cookie)
+    print("   🌐 Warm-up [1/5] homepage")
+    if _try_visit(page, 'https://www.domain.com.au/', "homepage", intensity="deep"):
+        pages_ok += 1
+    human_delay(4.0, 7.0)
+
+    # Step 2: 2 editorial pages (very lightweight — rarely blocked)
+    editorials = random.sample(WARMUP_EDITORIAL, 2)
+    for i, url in enumerate(editorials, 2):
+        if should_stop(): break
+        print(f"   🌐 Warm-up [{i}/5] editorial: {url.split('/')[-2]}")
+        if _try_visit(page, url, url, intensity="deep"):
+            pages_ok += 1
         human_delay(5.0, 10.0)
-    except Exception as e:
-        print(f"   ⚠️ Homepage exception: {e}")
 
-    # Step 2: suburb profile (often unblocked even when homepage is blocked)
+    # Step 3: suburb profile
     suburb = random.choice(WARMUP_SUBURBS)
-    print(f"   🌐 Warm-up step 2: /suburb-profile/{suburb}")
-    try:
-        page.goto(f'https://www.domain.com.au/suburb-profile/{suburb}',
-                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-        try:
-            page.wait_for_load_state('networkidle', timeout=15_000)
-        except PlaywrightTimeout:
-            pass
-        if not is_access_denied(page):
-            simulate_human_behavior(page)
-            pages_passed += 1
-            human_delay(6.0, 12.0)
-        else:
-            print("   ⚠️  Suburb profile blocked")
-            human_delay(3.0, 6.0)
-    except Exception as e:
-        print(f"   ⚠️ Suburb profile exception: {e}")
+    print(f"   🌐 Warm-up [4/5] suburb profile: {suburb}")
+    if _try_visit(page, f'https://www.domain.com.au/suburb-profile/{suburb}',
+                  suburb, intensity="deep"):
+        pages_ok += 1
+    human_delay(5.0, 9.0)
 
-    # Step 3: suburb search listing page
-    suburb2 = random.choice([s for s in WARMUP_SUBURBS if s != suburb])
-    print(f"   🌐 Warm-up step 3: /sale/{suburb2}/")
-    try:
-        page.goto(f'https://www.domain.com.au/sale/{suburb2}/',
-                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-        try:
-            page.wait_for_load_state('networkidle', timeout=15_000)
-        except PlaywrightTimeout:
-            pass
-        if not is_access_denied(page):
-            simulate_human_behavior(page)
-            pages_passed += 1
-            human_delay(5.0, 10.0)
-        else:
-            print("   ⚠️  Sale search blocked")
-            human_delay(3.0, 6.0)
-    except Exception as e:
-        print(f"   ⚠️ Search exception: {e}")
+    # Step 4: light sale suburb listing
+    sale_url = random.choice(WARMUP_SALE_LIGHT)
+    print(f"   🌐 Warm-up [5/5] light sale search")
+    if _try_visit(page, sale_url, "light-sale", intensity="normal"):
+        pages_ok += 1
+    human_delay(4.0, 8.0)
 
-    # Step 4: visit one property detail page (adds referral chain depth)
-    print(f"   🌐 Warm-up step 4: property detail page")
-    try:
-        detail_url = f'https://www.domain.com.au/sold-listings/{suburb2}/'
-        page.goto(detail_url, timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-        try:
-            page.wait_for_load_state('networkidle', timeout=15_000)
-        except PlaywrightTimeout:
-            pass
-        if not is_access_denied(page):
-            simulate_human_behavior(page)
-            pages_passed += 1
-            human_delay(4.0, 8.0)
-        else:
-            print("   ⚠️  Detail page blocked")
-    except Exception as e:
-        print(f"   ⚠️ Detail page exception: {e}")
+    # Enforce minimum time budget
+    elapsed = time.time() - t_start
+    if elapsed < MIN_WARMUP_FULL_SECS:
+        extra = MIN_WARMUP_FULL_SECS - elapsed
+        print(f"   ⏳ Padding warm-up by {extra:.0f}s to hit min budget")
+        human_delay(extra, extra + 5)
 
     cookies = page.context.cookies()
     has_abck = '_abck' in [c['name'] for c in cookies]
-    print(f"   🍪 Akamai _abck cookie: {has_abck} | Pages passed: {pages_passed}/4")
-
-    # v5.3: proceed even if 0 pages passed — search pages may still work
+    print(f"   🍪 _abck: {has_abck} | Pages OK: {pages_ok}/5 | "
+          f"Time: {(time.time()-t_start):.0f}s")
     return True
 
 
@@ -463,51 +446,275 @@ def warm_up_light(page):
     """
     Light warm-up for sessions 2+.
 
-    v5.3 change: always returns True. Homepage block is common for
-    repeat sessions; scrape pages are often still accessible.
+    v5.4: tries 1 editorial + 1 suburb profile (cookies already exist,
+    just need to refresh the trust window).
+    Enforces minimum 20s.
     """
-    print("   🌐 Light warm-up: homepage + suburb profile")
-    pages_passed = 0
+    t_start  = time.time()
+    pages_ok = 0
 
-    try:
-        page.goto('https://www.domain.com.au/', timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-        try:
-            page.wait_for_load_state('networkidle', timeout=10_000)
-        except PlaywrightTimeout:
-            pass
-        if is_access_denied(page):
-            print("   ⚠️  Homepage blocked — continuing anyway")
-        else:
-            simulate_human_behavior(page)
-            pages_passed += 1
-        human_delay(3.0, 7.0)
-    except Exception as e:
-        print(f"   ⚠️ Light warm-up homepage exception: {e}")
+    print("   🌐 Light warm-up: editorial + suburb profile")
 
-    # Extra suburb visit to build a small navigation history
+    editorial = random.choice(WARMUP_EDITORIAL)
+    if _try_visit(page, editorial, editorial.split('/')[-2], intensity="normal"):
+        pages_ok += 1
+    human_delay(4.0, 7.0)
+
     suburb = random.choice(WARMUP_SUBURBS)
-    try:
-        page.goto(f'https://www.domain.com.au/suburb-profile/{suburb}',
-                  timeout=NAV_TIMEOUT_MS, wait_until='domcontentloaded')
-        try:
-            page.wait_for_load_state('networkidle', timeout=10_000)
-        except PlaywrightTimeout:
-            pass
-        if not is_access_denied(page):
-            simulate_human_behavior(page)
-            pages_passed += 1
-        human_delay(3.0, 6.0)
-    except Exception:
-        pass
+    if _try_visit(page, f'https://www.domain.com.au/suburb-profile/{suburb}',
+                  suburb, intensity="normal"):
+        pages_ok += 1
+    human_delay(3.0, 6.0)
+
+    elapsed = time.time() - t_start
+    if elapsed < MIN_WARMUP_LIGHT_SECS:
+        extra = MIN_WARMUP_LIGHT_SECS - elapsed
+        human_delay(extra, extra + 3)
 
     cookies = page.context.cookies()
     has_abck = '_abck' in [c['name'] for c in cookies]
-    print(f"   🍪 Akamai _abck cookie: {has_abck} | Pages passed: {pages_passed}/2")
-
-    # Always proceed — scrape pages may work even if warm-up pages were blocked
+    print(f"   🍪 _abck: {has_abck} | Pages OK: {pages_ok}/2 | "
+          f"Time: {(time.time()-t_start):.0f}s")
     return True
 
 
+def warm_up_probe(page):
+    """
+    v5.4 NEW: After warm-up, test a real search URL.
+    If blocked, run an extra mini warm-up round and retry (max 2 attempts).
+    Returns True if a search page became accessible, False if all probes fail.
+    """
+    test_url = (
+        "https://www.domain.com.au/sale/"
+        "?startloc=-37.8000,144.9500&endloc=-37.8500,145.0000"
+        "&excludeunderoffer=1&page=1"
+    )
+    for attempt in range(1, 3):
+        print(f"   🔍 Probe attempt {attempt}/2: testing search accessibility...")
+        payload = get_next_data(page, test_url)
+        if payload != 'BLOCKED':
+            print(f"   ✅ Probe passed — search endpoint accessible")
+            return True
+
+        if attempt == 1:
+            print("   ⚠️  Probe blocked — running extra trust round...")
+            # Extra trust-building: 2 more editorial pages
+            for url in random.sample(WARMUP_EDITORIAL, 2):
+                _try_visit(page, url, url.split('/')[-2], intensity="deep")
+                human_delay(8.0, 15.0)
+
+    print("   ⚠️  Probe failed both attempts — proceeding anyway (may get blocks)")
+    return False
+
+
+# ==========================================
+# LISTING PARSER
+# ==========================================
+def parse_listings_payload(payload, status_label, seen_records):
+    props    = payload.get('props', {}).get('pageProps', {}).get('componentProps', {})
+    listings = props.get('listingsMap', {})
+    total_pages = props.get('totalPages', 1)
+    records  = []
+
+    for pid, item in listings.items():
+        pid_str   = str(pid)
+        m         = item.get('listingModel', {})
+        raw_price = str(m.get('price', 'N/A'))
+
+        if pid_str in seen_records:
+            old = seen_records[pid_str]
+            if old['Status'] == status_label and old['Price'] == raw_price:
+                continue
+
+        a        = m.get('address', {})
+        f        = m.get('features', {})
+        street   = a.get('street', 'N/A')
+        suburb   = str(a.get('suburb', 'Map Area')).upper()
+        postcode = a.get('postcode', '')
+        url_path = m.get('url', '')
+        lat      = a.get('lat', m.get('geolocation', {}).get('latitude'))
+        lng      = a.get('lng', m.get('geolocation', {}).get('longitude'))
+
+        full_address = f"{street}, {suburb} VIC {postcode}".strip() if street != 'N/A' else None
+        if not full_address:
+            continue
+
+        # Date extraction
+        date_val = m.get('dateSold', m.get('dateListed'))
+        if not date_val:
+            date_val = m.get('status', {}).get('date')
+        if not date_val:
+            item_str   = json.dumps(item)
+            date_match = re.search(r'([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', item_str)
+            if date_match:
+                date_val = date_match.group(1)
+            else:
+                iso_match = re.search(
+                    r'"[A-Za-z]*[dD]ate[A-Za-z]*"\s*:\s*"([0-9]{4}-[0-9]{2}-[0-9]{2})', item_str
+                )
+                if iso_match:
+                    date_val = iso_match.group(1)
+        if not date_val:
+            date_val = 'N/A'
+
+        # Land size normalisation
+        raw_land = f.get('landSize', np.nan)
+        land_unit = str(f.get('landUnit', '')).lower()
+        try:
+            if pd.notna(raw_land):
+                raw_land = float(raw_land)
+                if 'ha' in land_unit or 'hectare' in land_unit:
+                    raw_land = raw_land * 10000
+        except Exception:
+            pass
+
+        record = {
+            'Property_ID':        pid_str,
+            'Status':             status_label,
+            'Full_Address':       full_address,
+            'Suburb':             suburb,
+            'Postcode':           postcode,
+            'Property_Type':      f.get('propertyTypeFormatted', f.get('propertyType', 'N/A')),
+            'Date':               date_val,
+            'Beds':               f.get('beds', 0),
+            'Baths':              f.get('baths', 0),
+            'Car_Spaces':         f.get('parking', f.get('carspaces', 0)),
+            'LandSize_sqm':       raw_land,
+            'Propertycount':      np.nan,
+            'Raw_Price':          raw_price,
+            'Numeric_Price':      parse_raw_price(raw_price),
+            'Latitude':           lat,
+            'Longitude':          lng,
+            'Distance_to_CBD_km': calculate_distance_to_cbd(lat, lng),
+            'URL':                f"https://www.domain.com.au{url_path}" if url_path else "N/A",
+            'Last_Updated':       pd.Timestamp.now().strftime('%Y-%m-%d'),
+        }
+        records.append(record)
+        seen_records[pid_str] = {'Status': status_label, 'Price': raw_price}
+
+    return records, total_pages
+
+
+# ==========================================
+# CELL SCRAPING (v5.4 — interleaved + backoff)
+# ==========================================
+def build_search_url(t_lat, b_lat, l_lng, r_lng, mode_path, mode_extra, pg):
+    """
+    Build search URL with randomised (but valid) query param order
+    to add entropy to the request fingerprint.
+    """
+    base_params = [
+        f"startloc={t_lat}%2C{l_lng}",
+        f"endloc={b_lat}%2C{r_lng}",
+    ]
+    if mode_extra:
+        base_params.insert(random.randint(0, 2), mode_extra)
+
+    random.shuffle(base_params)  # cosmetic entropy
+    query = "&".join(base_params)
+    return f"https://www.domain.com.au/{mode_path}/?{query}&page={pg}"
+
+
+def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
+    t_lat, b_lat, l_lng, r_lng = cell
+    print(f"\n📍 cell #{cell_idx_global} | "
+          f"{t_lat},{l_lng} → {b_lat},{r_lng}")
+
+    cell_records  = 0
+    cell_strikes  = 0
+
+    # v5.4: interleave modes — alternate For Sale / Sold per page
+    # instead of exhausting one mode then the other
+    modes_cycle = list(SEARCH_MODES) * MAX_PAGES_PER_QUERY
+    mode_idx    = 0
+
+    # Track page numbers per mode independently
+    page_nums     = {label: 1 for label, _, _ in SEARCH_MODES}
+    mode_done     = {label: False for label, _, _ in SEARCH_MODES}
+    mode_totals   = {label: 999 for label, _, _ in SEARCH_MODES}  # unknown until first fetch
+
+    # Iterate until both modes exhausted or strikes exceeded
+    attempts = 0
+    while not all(mode_done.values()) and cell_strikes < CELL_MAX_STRIKES:
+        if should_stop():
+            print("   ⏰ Timeout — stopping cell mid-scrape")
+            break
+
+        # Pick next mode in round-robin (skip done modes)
+        status_label, mode_path, mode_extra = modes_cycle[mode_idx % len(SEARCH_MODES)]
+        mode_idx += 1
+        if mode_done[status_label]:
+            continue
+
+        pg = page_nums[status_label]
+        if pg > mode_totals[status_label]:
+            mode_done[status_label] = True
+            continue
+
+        # Abandon heuristic
+        if pg >= ABANDON_START_PAGE:
+            prob = min(ABANDON_BASE_PROB + (pg - ABANDON_START_PAGE) * ABANDON_GROWTH,
+                       ABANDON_MAX_PROB)
+            if random.random() < prob:
+                print(f"   🚪 {status_label}: stop at pg {pg} (abandon p={prob:.2f})")
+                mode_done[status_label] = True
+                continue
+
+        # Rest / inter-request delay
+        if pages_in_session >= PAGES_BEFORE_REST:
+            rest = random.uniform(*REST_DURATION)
+            print(f"   ☕ Rest {rest:.0f}s")
+            interruptible_sleep(rest, "rest")
+            pages_in_session = 0
+        elif attempts > 0:
+            human_delay(*DELAY_BETWEEN_REQUESTS)
+
+        attempts += 1
+
+        url     = build_search_url(t_lat, b_lat, l_lng, r_lng, mode_path, mode_extra, pg)
+        payload = get_next_data(page, url)
+        pages_in_session += 1
+
+        if payload == 'BLOCKED':
+            cell_strikes += 1
+            print(f"   ⚠️  Block: {status_label} pg {pg} "
+                  f"(strike {cell_strikes}/{CELL_MAX_STRIKES})")
+
+            # v5.4: per-block recovery sleep before retry
+            recovery = random.uniform(*BLOCK_RECOVERY_SLEEP)
+            print(f"   😴 Block recovery: {recovery:.0f}s")
+            interruptible_sleep(recovery, "block recovery")
+            continue  # retry same mode+page next iteration
+
+        # Success — reset strikes (v5.4: strike counter resets on any success)
+        cell_strikes = 0
+
+        page_records, total_pages = parse_listings_payload(payload, status_label, seen_records)
+        mode_totals[status_label] = total_pages
+
+        if page_records:
+            save_incremental_data(page_records, FILE_NAME)
+            cell_records     += len(page_records)
+            pages_in_session += 0  # already counted above
+            print(f"   + {len(page_records):3d}  ({status_label} pg {pg}/{total_pages})")
+        elif pg == 1:
+            print(f"   ◌ No {status_label} listings (pg 1)")
+            mode_done[status_label] = True
+            continue
+
+        page_nums[status_label] = pg + 1
+        if pg >= total_pages:
+            mode_done[status_label] = True
+
+    was_blocked = (cell_records == 0 and
+                   sum(1 for v in mode_done.values() if not v) > 0 and
+                   cell_strikes >= CELL_MAX_STRIKES)
+    return cell_records, was_blocked, pages_in_session
+
+
+# ==========================================
+# CELL SELECTION (v5.4 — column-diversified shuffle)
+# ==========================================
 def select_cells_for_today(all_cells):
     manual_offset = os.getenv('MANUAL_OFFSET', '').strip()
 
@@ -518,113 +725,63 @@ def select_cells_for_today(all_cells):
         offset = random.randint(0, ROTATION_STRIDE - 1)
         print(f"   🎲 Random offset: {offset}")
     else:
-        today = dt.date.today()
+        today  = dt.date.today()
         offset = today.toordinal() % ROTATION_STRIDE
         print(f"   📅 Auto offset {offset} for {today}")
 
     all_today = [(i, c) for i, c in enumerate(all_cells) if i % ROTATION_STRIDE == offset]
 
-    rng = random.Random(offset)
-    rng.shuffle(all_today)
+    # v5.4: group by lng column, then interleave groups so we don't
+    # hammer the same lng band repeatedly.  Within each group, shuffle.
+    lng_groups = {}
+    for i, c in all_today:
+        col = i % GRID_SIZE
+        lng_groups.setdefault(col, []).append((i, c))
+    for g in lng_groups.values():
+        random.shuffle(g)
 
-    half = len(all_today) // 2
-    slot_a = all_today[:half]
-    slot_b = all_today[half:]
+    # Round-robin across lng columns
+    interleaved = []
+    cols_sorted = sorted(lng_groups.keys())
+    max_len     = max(len(v) for v in lng_groups.values())
+    for k in range(max_len):
+        for col in cols_sorted:
+            if k < len(lng_groups[col]):
+                interleaved.append(lng_groups[col][k])
 
-    print(f"   📦 Slot A: {sorted([idx for idx, _ in slot_a])}")
-    print(f"   📦 Slot B: {sorted([idx for idx, _ in slot_b])}")
+    # v5.4: 20% jitter — occasionally swap adjacent cells for extra variance
+    if random.random() < 0.2 and len(interleaved) >= 2:
+        i1, i2 = random.sample(range(len(interleaved)), 2)
+        interleaved[i1], interleaved[i2] = interleaved[i2], interleaved[i1]
+
+    half    = len(interleaved) // 2
+    slot_a  = interleaved[:half]
+    slot_b  = interleaved[half:]
 
     if RUN_SLOT == 'A':
         selected = slot_a
-        print(f"   🅰️ This run is SLOT A — {len(selected)} cells")
+        print(f"   🅰️ Slot A — {len(selected)} cells")
     elif RUN_SLOT == 'B':
         selected = slot_b
-        print(f"   🅱️ This run is SLOT B — {len(selected)} cells")
+        print(f"   🅱️ Slot B — {len(selected)} cells")
     else:
-        selected = all_today
-        print(f"   ⚠️ RUN_SLOT='{RUN_SLOT}' invalid — using all cells")
+        selected = interleaved
+        print(f"   ⚠️ Invalid RUN_SLOT — using all {len(selected)} cells")
 
     if len(selected) > CELLS_PER_RUN:
         selected = selected[:CELLS_PER_RUN]
 
-    cell_ids = sorted([idx for idx, _ in selected])
-    print(f"   🗺️  Final cells to scrape: {cell_ids}")
+    print(f"   🗺️  Final cells: {sorted([idx for idx, _ in selected])}")
     return selected
 
 
-def scrape_cell(page, cell_idx_global, cell, seen_records, pages_in_session):
-    t_lat, b_lat, l_lng, r_lng = cell
-    print(f"\n📍 cell #{cell_idx_global} | {t_lat},{l_lng} → {b_lat},{r_lng}")
-
-    cell_records = 0
-    cell_strikes = 0
-
-    modes = list(SEARCH_MODES)
-    random.shuffle(modes)
-
-    for status_label, mode_path, mode_extra in modes:
-        if cell_strikes >= CELL_MAX_STRIKES:
-            break
-
-        base_query = f"startloc={t_lat}%2C{l_lng}&endloc={b_lat}%2C{r_lng}"
-        if mode_extra:
-            base_query = f"{mode_extra}&{base_query}"
-
-        for pg in range(1, MAX_PAGES_PER_QUERY + 1):
-            if cell_strikes >= CELL_MAX_STRIKES:
-                break
-
-            if should_stop():
-                print(f"   ⏰ Timeout reached, stopping cell mid-scrape")
-                break
-
-            if pg >= ABANDON_START_PAGE:
-                abandon_prob = min(
-                    ABANDON_BASE_PROB + (pg - ABANDON_START_PAGE) * ABANDON_GROWTH,
-                    ABANDON_MAX_PROB
-                )
-                if random.random() < abandon_prob:
-                    print(f"   🚪 Stopping at page {pg} (human-like abandon, p={abandon_prob:.2f})")
-                    break
-
-            if pages_in_session >= PAGES_BEFORE_REST:
-                rest = random.uniform(*REST_DURATION)
-                print(f"   ☕ Rest {rest:.0f}s")
-                interruptible_sleep(rest, "rest")
-                pages_in_session = 0
-            elif pg > 1:
-                human_delay(*DELAY_BETWEEN_REQUESTS)
-
-            url = f"https://www.domain.com.au/{mode_path}/?{base_query}&page={pg}"
-            payload = get_next_data(page, url)
-            pages_in_session += 1
-
-            if payload == 'BLOCKED':
-                cell_strikes += 1
-                print(f"   ⚠️ Block: {status_label} pg {pg} (strike {cell_strikes}/{CELL_MAX_STRIKES})")
-                continue
-
-            page_records, total_pages = parse_listings_payload(payload, status_label, seen_records)
-            if page_records:
-                save_incremental_data(page_records, FILE_NAME)
-                cell_records += len(page_records)
-                print(f"   + {len(page_records)} ({status_label} pg {pg}/{total_pages})")
-            elif pg == 1:
-                print(f"   ◌ No {status_label} listings")
-                break
-
-            if pg >= total_pages:
-                break
-
-        human_delay(*DELAY_BETWEEN_REQUESTS)
-
-    was_blocked = (cell_records == 0 and cell_strikes > 0)
-    return cell_records, was_blocked, pages_in_session
-
-
+# ==========================================
+# MAIN
+# ==========================================
 def main():
     arm_watchdog()
 
+    # Load existing records for dedup
     seen_records = {}
     if os.path.exists(FILE_NAME) and os.path.getsize(FILE_NAME) > 0:
         try:
@@ -633,62 +790,62 @@ def main():
                 pid = str(row.get('Property_ID', ''))
                 seen_records[pid] = {
                     'Status': str(row.get('Status', '')),
-                    'Price': str(row.get('Raw_Price', '')),
+                    'Price':  str(row.get('Raw_Price', '')),
                 }
-            print(f"   📚 Loaded {len(seen_records)} existing records for dedup")
+            print(f"   📚 Loaded {len(seen_records)} existing records")
         except pd.errors.EmptyDataError:
             pass
 
+    # Build grid
     lat_step = (LAT_NORTH - LAT_SOUTH) / GRID_SIZE
-    lng_step = (LNG_EAST - LNG_WEST) / GRID_SIZE
+    lng_step = (LNG_EAST  - LNG_WEST)  / GRID_SIZE
     all_cells = []
     for i in range(GRID_SIZE):
         for j in range(GRID_SIZE):
-            t_lat = round(LAT_NORTH - (i * lat_step), 4)
+            t_lat = round(LAT_NORTH - (i      * lat_step), 4)
             b_lat = round(LAT_NORTH - ((i + 1) * lat_step), 4)
-            l_lng = round(LNG_WEST + (j * lng_step), 4)
-            r_lng = round(LNG_WEST + ((j + 1) * lng_step), 4)
+            l_lng = round(LNG_WEST  + (j      * lng_step), 4)
+            r_lng = round(LNG_WEST  + ((j + 1) * lng_step), 4)
             all_cells.append((t_lat, b_lat, l_lng, r_lng))
 
     todays_cells = select_cells_for_today(all_cells)
-    total_today = len(todays_cells)
+    total_today  = len(todays_cells)
     num_sessions = math.ceil(total_today / CELLS_PER_SESSION) if total_today > 0 else 0
-    print(f"   📊 This run: {total_today} cells, {num_sessions} sessions")
+    print(f"   📊 {total_today} cells | {num_sessions} sessions")
 
     if PROXY_URL:
         print(f"   🛡️ Proxy: {PROXY_URL.split('@')[-1] if '@' in PROXY_URL else PROXY_URL}")
     else:
-        print("   ⚠️  No proxy — running in no-proxy resilient mode (v5.3)")
+        print("   ⚠️  No proxy — no-proxy resilient mode (v5.4)")
 
     if total_today == 0:
-        print("\n⚠️ No cells to scrape this run.")
+        print("\n⚠️ No cells to scrape.")
         return
 
-    total_records = 0
-    cells_done = 0
-    cells_empty = 0
-    cells_blocked = 0
+    total_records      = 0
+    cells_done         = 0
+    cells_empty        = 0
+    cells_blocked      = 0
     consecutive_blocks = 0
-    session_idx = 0
-    cell_pos = 0
+    session_idx        = 0
+    cell_pos           = 0
 
     while cell_pos < total_today:
         if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
-            print(f"\n🛑 {consecutive_blocks} blocked cells in a row — stopping run")
+            print(f"\n🛑 {consecutive_blocks} consecutive blocked cells — stopping run")
             break
-
         if should_stop():
-            remaining_min = time_remaining() / 60
-            print(f"\n⏰ Approaching workflow timeout ({remaining_min:.1f} min left)")
-            print(f"   Stopping gracefully after {cell_pos}/{total_today} cells")
+            print(f"\n⏰ Timeout ({time_remaining()/60:.1f} min left) — stopping at "
+                  f"{cell_pos}/{total_today} cells")
             break
 
-        session_idx += 1
-        session_end = min(cell_pos + CELLS_PER_SESSION, total_today)
+        session_idx  += 1
+        session_end   = min(cell_pos + CELLS_PER_SESSION, total_today)
         session_cells = todays_cells[cell_pos:session_end]
 
         print(f"\n{'='*60}")
-        print(f"🚀 SESSION {session_idx}/{num_sessions} — cells {cell_pos + 1}-{session_end} of {total_today}")
+        print(f"🚀 SESSION {session_idx}/{num_sessions} — "
+              f"cells {cell_pos+1}–{session_end} of {total_today}")
         print(f"{'='*60}")
 
         try:
@@ -697,42 +854,44 @@ def main():
                 page.set_default_timeout(NAV_TIMEOUT_MS)
                 page.set_default_navigation_timeout(NAV_TIMEOUT_MS)
 
-                # v5.3: warm_up always returns True — session never skipped
                 if session_idx == 1:
                     warm_up_full(page)
+                    warm_up_probe(page)   # v5.4: probe before first scrape
                 else:
                     warm_up_light(page)
 
                 human_delay(3.0, 6.0)
 
                 pages_in_session = 0
-                session_records = 0
+                session_records  = 0
 
                 for (cell_idx_global, cell) in session_cells:
                     if consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
                         break
+                    if should_stop():
+                        break
 
-                    cell_records, was_blocked, pages_in_session = scrape_cell(
+                    cell_recs, was_blocked, pages_in_session = scrape_cell(
                         page, cell_idx_global, cell, seen_records, pages_in_session
                     )
 
-                    if cell_records > 0:
-                        session_records += cell_records
-                        total_records += cell_records
-                        cells_done += 1
-                        consecutive_blocks = 0
+                    if cell_recs > 0:
+                        session_records    += cell_recs
+                        total_records      += cell_recs
+                        cells_done         += 1
+                        consecutive_blocks  = 0
                     elif was_blocked:
-                        cells_blocked += 1
+                        cells_blocked      += 1
                         consecutive_blocks += 1
-                        print(f"   🚫 Cell blocked (run streak: {consecutive_blocks})")
+                        print(f"   🚫 Cell fully blocked (streak: {consecutive_blocks})")
                     else:
-                        cells_done += 1
-                        cells_empty += 1
-                        consecutive_blocks = 0
+                        cells_done         += 1
+                        cells_empty        += 1
+                        consecutive_blocks  = 0
 
                     cell_pos += 1
 
-                print(f"\n   📊 Session {session_idx} done: +{session_records} records")
+                print(f"\n   📊 Session {session_idx}: +{session_records} records")
 
         except Exception as e:
             print(f"   ❌ Session exception: {e}")
@@ -740,26 +899,25 @@ def main():
 
         if cell_pos < total_today and consecutive_blocks < MAX_CONSECUTIVE_BLOCKS:
             cooldown = random.uniform(*SESSION_COOLDOWN)
-            print(f"\n   ⏰ Cooldown {cooldown:.0f}s before next session...")
+            print(f"\n   ⏰ Cooldown {cooldown:.0f}s...")
             interruptible_sleep(cooldown, "session cooldown")
 
+    # ── Summary ──────────────────────────────────────────
     print(f"\n{'='*60}")
-    print(f"✅ DONE — Run slot {RUN_SLOT}")
+    print(f"✅ DONE — Slot {RUN_SLOT}")
     print(f"{'='*60}")
-    print(f"   Sessions used:  {session_idx}")
-    print(f"   Cells done:     {cells_done}/{total_today}  "
+    print(f"   Sessions:      {session_idx}")
+    print(f"   Cells done:    {cells_done}/{total_today}  "
           f"({cells_done - cells_empty} with data, {cells_empty} empty)")
-    if cells_blocked > 0:
-        print(f"   Cells blocked:  {cells_blocked}")
-    print(f"   New records:    {total_records}")
-    elapsed_min = (time.time() - SCRIPT_START_TIME) / 60
-    print(f"   Run time:       {elapsed_min:.1f} min")
+    if cells_blocked:
+        print(f"   Cells blocked: {cells_blocked}")
+    print(f"   New records:   {total_records}")
+    print(f"   Run time:      {(time.time()-SCRIPT_START_TIME)/60:.1f} min")
     if cell_pos < total_today:
-        skipped = total_today - cell_pos
-        print(f"   Cells skipped:  {skipped} (will be retried in next rotation cycle)")
+        print(f"   Skipped:       {total_today - cell_pos} cells (next rotation cycle)")
 
     if total_records == 0 and consecutive_blocks >= MAX_CONSECUTIVE_BLOCKS:
-        print("⚠️  Stopped early due to blocks — partial run")
+        print("⚠️  Early stop due to blocks")
         sys.exit(1)
 
 
