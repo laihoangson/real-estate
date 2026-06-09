@@ -40,6 +40,7 @@ import pandas as pd
 import numpy as np
 from camoufox.sync_api import Camoufox
 from playwright.sync_api import TimeoutError as PlaywrightTimeout
+from urllib.parse import urlparse
 
 print("STARTING SCRAPER (v5.2 — 10 pages × 7 cells × twice daily)")
 
@@ -387,14 +388,23 @@ def get_next_data(page, url):
 
 def make_camoufox_kwargs():
     kwargs = {
-        'headless': HEADLESS,
-        'humanize': False,
-        'locale': 'en-AU',
-        'os': random.choice(['windows', 'macos']),
+        "headless": HEADLESS,
+        "humanize": False,
+        "locale": "en-AU",
+        "os": random.choice(["windows", "macos"]),
     }
+
     if PROXY_URL:
-        kwargs['proxy'] = {'server': PROXY_URL}
-        kwargs['geoip'] = True
+        p = urlparse(PROXY_URL)
+
+        kwargs["proxy"] = {
+            "server": f"{p.scheme}://{p.hostname}:{p.port}",
+            "username": p.username,
+            "password": p.password,
+        }
+
+        kwargs["geoip"] = True
+
     return kwargs
 
 
