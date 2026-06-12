@@ -4,12 +4,12 @@ permissions:
   contents: write
 
 on:
-  schedule:
+#  schedule:
     # Run A: 02:00 UTC daily = ~12:00-13:00 Melbourne (noon)
-    - cron: "0 2 * * *"
+    # - cron: "0 2 * * *"
 
     # Run B: 14:00 UTC daily = ~00:00-01:00 Melbourne (midnight)
-    - cron: "0 14 * * *"
+    # - cron: "0 14 * * *"
 
   workflow_dispatch:
     inputs:
