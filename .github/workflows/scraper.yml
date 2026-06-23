@@ -1,15 +1,12 @@
-name: Melbourne Property - Twice Daily Scrape
+name: Melbourne Property - Twice Daily Scrape (Rotating Hour)
 
 permissions:
   contents: write
 
 on:
+  # Checks every hour; the actual job only runs at the target hour for that day (see "Compute target hour" step)
   schedule:
-      # Run A: 02:00 UTC daily = ~12:00-13:00 Melbourne (noon)
-      - cron: "0 2 * * *"
-
-      # Run B: 14:00 UTC daily = ~00:00-01:00 Melbourne (midnight)
-      - cron: "0 14 * * *"
+    - cron: "0 * * * *"
 
   workflow_dispatch:
     inputs:
@@ -41,7 +38,7 @@ env:
 jobs:
 
   # ──────────────────────────────────────────────
-  # JOB 1: Twice-daily small batch scrape
+  # JOB 1: Scrape — runs at the target hour, which shifts +1h each day and resets every 7 days
   # ──────────────────────────────────────────────
   scrape:
     name: 1 - Scrape (7 cells, 10 pages each)
@@ -52,29 +49,78 @@ jobs:
     # Timeline: Python stops at 5h20m → commits by ~5h25m → YAML never reached.
     timeout-minutes: 350
 
+    outputs:
+      should_run: ${{ steps.gate.outputs.should_run }}
+      run_slot: ${{ steps.gate.outputs.run_slot }}
+
     env:
       HEADLESS: "true"
       PROXY_URL: ${{ secrets.PROXY_URL }}
       CELLS_PER_RUN: ${{ inputs.cells_per_run || '7' }}
       MANUAL_OFFSET: ${{ inputs.offset || '' }}
-
-      # Auto-detect run slot from cron schedule
-      RUN_SLOT: ${{ inputs.run_slot || (github.event.schedule == '0 2 * * *' && 'A' || 'B') }}
-
       DISPLAY: ":99"
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Print run info
+      # ============================================
+      # Rotating hour logic:
+      # Base run hours: 02:00 UTC (slot A) and 14:00 UTC (slot B).
+      # Each day shifts +1h from the base; OFFSET = day_number mod 7.
+      # → After 7 days, offset resets to 0 (cycle repeats).
+      # Since the workflow checks every hour (hourly cron), this step decides
+      # whether the current hour matches today's target hour — if not,
+      # all heavy steps below are skipped.
+      # ============================================
+      - name: Compute target hour (rotate +1h/day, reset every 7 days)
+        id: gate
         run: |
+          CURRENT_HOUR=$(date -u +%H)
+          DAY_INDEX=$(( $(date -u +%s) / 86400 ))
+          OFFSET=$(( DAY_INDEX % 7 ))
+          TARGET_A=$(printf '%02d' $(( (2  + OFFSET) % 24 )))
+          TARGET_B=$(printf '%02d' $(( (14 + OFFSET) % 24 )))
+
           echo "📅 Date (UTC): $(date -u +%Y-%m-%d)"
-          echo "🕐 Time (UTC): $(date -u +%H:%M)"
-          echo "🅰️/🅱️ Run Slot: ${{ env.RUN_SLOT }}"
-          echo "📦 Cells per run: ${{ env.CELLS_PER_RUN }}"
+          echo "🕐 Current hour (UTC): $CURRENT_HOUR"
+          echo "🔄 Day index: $DAY_INDEX | Offset (mod 7): $OFFSET"
+          echo "🎯 Target A: $TARGET_A:00 UTC | Target B: $TARGET_B:00 UTC"
           echo "📌 Event name: ${{ github.event_name }}"
-          echo "📌 Schedule: ${{ github.event.schedule }}"
+
+          SHOULD_RUN="false"
+          RUN_SLOT=""
+
+          if [ "$CURRENT_HOUR" = "$TARGET_A" ]; then
+            SHOULD_RUN="true"
+            RUN_SLOT="A"
+          fi
+
+          if [ "$CURRENT_HOUR" = "$TARGET_B" ]; then
+            SHOULD_RUN="true"
+            RUN_SLOT="B"
+          fi
+
+          # Manual dispatch always runs, using the run_slot selected by the user
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SHOULD_RUN="true"
+            RUN_SLOT="${{ inputs.run_slot || 'A' }}"
+          fi
+
+          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
+          echo "run_slot=$RUN_SLOT" >> $GITHUB_OUTPUT
+
+          if [ "$SHOULD_RUN" = "true" ]; then
+            echo "✅ Will run scrape (slot $RUN_SLOT)"
+          else
+            echo "⏭️ Not target hour — skipping scrape"
+          fi
+
+      - name: Print run info
+        if: steps.gate.outputs.should_run == 'true'
+        run: |
+          echo "🅰️/🅱️ Run Slot: ${{ steps.gate.outputs.run_slot }}"
+          echo "📦 Cells per run: ${{ env.CELLS_PER_RUN }}"
 
       # ============================================
       # FIX: Pin Node.js 20 to avoid Node 24 incompatibility
@@ -82,16 +128,19 @@ jobs:
       # undefined reading 'url' in pageError.location).
       # ============================================
       - name: Setup Node.js 20
+        if: steps.gate.outputs.should_run == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Setup Python 3.11
+        if: steps.gate.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install Firefox + Xvfb system dependencies
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -105,6 +154,7 @@ jobs:
       # versions that support Node 20+ properly.
       # ============================================
       - name: Install Python dependencies
+        if: steps.gate.outputs.should_run == 'true'
         run: |
          pip install --upgrade pip
          # pin versions
@@ -113,6 +163,7 @@ jobs:
          pip install pandas beautifulsoup4 numpy
 
       - name: Print Playwright + Camoufox versions
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           echo "Node version: $(node --version)"
           echo "Python version: $(python --version)"
@@ -121,6 +172,7 @@ jobs:
 
       - name: Cache Camoufox binary
         id: cache-camoufox
+        if: steps.gate.outputs.should_run == 'true'
         uses: actions/cache@v4
         with:
           path: ~/.cache/camoufox
@@ -129,19 +181,21 @@ jobs:
           key: camoufox-binary-v3-${{ runner.os }}
 
       - name: Fetch Camoufox browser binary
-        if: steps.cache-camoufox.outputs.cache-hit != 'true'
+        if: steps.gate.outputs.should_run == 'true' && steps.cache-camoufox.outputs.cache-hit != 'true'
         run: python -m camoufox fetch
 
       - name: Start Xvfb virtual display
+        if: steps.gate.outputs.should_run == 'true'
         run: |
           Xvfb :99 -screen 0 1366x768x24 &
           sleep 2
 
       - name: Run scraper
+        if: steps.gate.outputs.should_run == 'true'
         run: python etl/extract_house_price.py
 
       - name: Commit & push scraped data
-        if: always()
+        if: always() && steps.gate.outputs.should_run == 'true'
         run: |
           git config --global user.name "laihoangson"
           git config --global user.email "lson21757@gmail.com"
@@ -149,20 +203,21 @@ jobs:
           git add ${{ env.SCRAPE_FILE }}
 
           git diff --cached --quiet || \
-            git commit -m "Scrape slot ${{ env.RUN_SLOT }} - $(date -u +%Y-%m-%d_%H%M) [skip ci]"
+            git commit -m "Scrape slot ${{ steps.gate.outputs.run_slot }} - $(date -u +%Y-%m-%d_%H%M) [skip ci]"
 
           git pull origin main --rebase || true
           git push || true
 
   # ──────────────────────────────────────────────
-  # JOB 2: Weekly enrich
-  # Only runs on Sunday Run B OR manual dispatch
+  # JOB 2: Enrich — runs daily, immediately after a real scrape occurs
   # ──────────────────────────────────────────────
   enrich:
     name: 2 - Enrich
     runs-on: ubuntu-latest
     needs: scrape
-    if: always() && needs.scrape.result != 'cancelled'
+    # Only runs if the scrape job actually hit the target hour for that day
+    # (i.e. not one of the 23 skipped hourly checks), and scrape was not fully cancelled.
+    if: always() && needs.scrape.outputs.should_run == 'true' && needs.scrape.result != 'cancelled'
     timeout-minutes: 60
 
     steps:
@@ -171,60 +226,29 @@ jobs:
         with:
           ref: main
 
-      - name: Decide if enrich should run
-        id: check
+      - name: Print run info
         run: |
-
-          echo "📌 Event name: ${{ github.event_name }}"
-          echo "📌 Schedule: ${{ github.event.schedule }}"
-
-          SHOULD_RUN="false"
-
-          # Manual dispatch always allowed
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            SHOULD_RUN="true"
-          fi
-
-          # Sunday midnight cron (Run B)
-          if [ "${{ github.event.schedule }}" = "0 14 * * *" ]; then
-
-            # Check if today UTC is Sunday
-            DOW=$(date -u +%u)
-
-            if [ "$DOW" = "7" ]; then
-              SHOULD_RUN="true"
-            fi
-          fi
-
-          echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
-
-          if [ "$SHOULD_RUN" = "true" ]; then
-            echo "✅ Will run enrich"
-          else
-            echo "⏭️ Skipping enrich"
-          fi
+          echo "📅 Date (UTC): $(date -u +%Y-%m-%d)"
+          echo "🅰️/🅱️ Slot just scraped: ${{ needs.scrape.outputs.run_slot }}"
+          echo "✅ Enrich runs daily immediately after scrape"
 
       - name: Setup Python 3.11
-        if: steps.check.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Install enrich dependencies
-        if: steps.check.outputs.should_run == 'true'
         run: |
           pip install --upgrade pip
           pip install pandas requests openpyxl tqdm numpy
 
       - name: Run enrichment
-        if: steps.check.outputs.should_run == 'true'
         run: |
           python etl/enrich_property_data.py \
             --input  ${{ env.SCRAPE_FILE }} \
             --output ${{ env.ENRICH_FILE }}
 
       - name: Commit & push enriched data
-        if: steps.check.outputs.should_run == 'true'
         run: |
           git config --global user.name "laihoangson"
           git config --global user.email "lson21757@gmail.com"
@@ -232,7 +256,7 @@ jobs:
           git add ${{ env.ENRICH_FILE }}
 
           git diff --cached --quiet || \
-            git commit -m "Enrich weekly - $(date -u +%Y-%m-%d) [skip ci]"
+            git commit -m "Enrich daily - $(date -u +%Y-%m-%d) [skip ci]"
 
           git pull origin main --rebase || true
           git push || true
