@@ -5,11 +5,38 @@ permissions:
 
 on:
   schedule:
-      # Run A: 02:00 UTC daily = ~12:00-13:00 Melbourne (noon)
-      - cron: "0 2 * * *"
+      # All cron entries below are in UTC. Melbourne time = UTC+10
+      # (fixed offset, same convention as before — no DST adjustment).
+      # Each day now has its own Run A / Run B pair, shifted by 1 hour
+      # per day of the week: Sun 01:00/13:00 ... Sat 07:00/19:00.
 
-      # Run B: 14:00 UTC daily = ~00:00-01:00 Melbourne (midnight)
-      - cron: "0 14 * * *"
+      # Sunday (Melbourne) - Run A: 01:00, Run B: 13:00
+      - cron: "0 15 * * 6"   # Run A -> Sun 01:00 Melbourne (fires Saturday 15:00 UTC)
+      - cron: "0 3 * * 0"    # Run B -> Sun 13:00 Melbourne
+
+      # Monday (Melbourne) - Run A: 02:00, Run B: 14:00
+      - cron: "0 16 * * 0"   # Run A -> Mon 02:00 Melbourne (fires Sunday 16:00 UTC)
+      - cron: "0 4 * * 1"    # Run B -> Mon 14:00 Melbourne
+
+      # Tuesday (Melbourne) - Run A: 03:00, Run B: 15:00
+      - cron: "0 17 * * 1"   # Run A -> Tue 03:00 Melbourne (fires Monday 17:00 UTC)
+      - cron: "0 5 * * 2"    # Run B -> Tue 15:00 Melbourne
+
+      # Wednesday (Melbourne) - Run A: 04:00, Run B: 16:00
+      - cron: "0 18 * * 2"   # Run A -> Wed 04:00 Melbourne (fires Tuesday 18:00 UTC)
+      - cron: "0 6 * * 3"    # Run B -> Wed 16:00 Melbourne
+
+      # Thursday (Melbourne) - Run A: 05:00, Run B: 17:00
+      - cron: "0 19 * * 3"   # Run A -> Thu 05:00 Melbourne (fires Wednesday 19:00 UTC)
+      - cron: "0 7 * * 4"    # Run B -> Thu 17:00 Melbourne
+
+      # Friday (Melbourne) - Run A: 06:00, Run B: 18:00
+      - cron: "0 20 * * 4"   # Run A -> Fri 06:00 Melbourne (fires Thursday 20:00 UTC)
+      - cron: "0 8 * * 5"    # Run B -> Fri 18:00 Melbourne
+
+      # Saturday (Melbourne) - Run A: 07:00, Run B: 19:00
+      - cron: "0 21 * * 5"   # Run A -> Sat 07:00 Melbourne (fires Friday 21:00 UTC)
+      - cron: "0 9 * * 6"    # Run B -> Sat 19:00 Melbourne
 
   workflow_dispatch:
     inputs:
@@ -58,8 +85,10 @@ jobs:
       CELLS_PER_RUN: ${{ inputs.cells_per_run || '7' }}
       MANUAL_OFFSET: ${{ inputs.offset || '' }}
 
-      # Auto-detect run slot from cron schedule
-      RUN_SLOT: ${{ inputs.run_slot || (github.event.schedule == '0 2 * * *' && 'A' || 'B') }}
+      # Auto-detect run slot from cron schedule.
+      # Run A schedules = early-Melbourne-morning crons (one per weekday).
+      # Anything else (including all Run B schedules) defaults to 'B'.
+      RUN_SLOT: ${{ inputs.run_slot || ( (github.event.schedule == '0 15 * * 6' || github.event.schedule == '0 16 * * 0' || github.event.schedule == '0 17 * * 1' || github.event.schedule == '0 18 * * 2' || github.event.schedule == '0 19 * * 3' || github.event.schedule == '0 20 * * 4' || github.event.schedule == '0 21 * * 5') && 'A' || 'B') }}
 
       DISPLAY: ":99"
 
@@ -155,8 +184,8 @@ jobs:
           git push || true
 
   # ──────────────────────────────────────────────
-  # JOB 2: Weekly enrich
-  # Only runs on Sunday Run B OR manual dispatch
+  # JOB 2: Daily enrich
+  # Runs right after the day's Run B scrape, or on manual dispatch
   # ──────────────────────────────────────────────
   enrich:
     name: 2 - Enrich
@@ -185,16 +214,13 @@ jobs:
             SHOULD_RUN="true"
           fi
 
-          # Sunday midnight cron (Run B)
-          if [ "${{ github.event.schedule }}" = "0 14 * * *" ]; then
-
-            # Check if today UTC is Sunday
-            DOW=$(date -u +%u)
-
-            if [ "$DOW" = "7" ]; then
+          # Daily Run B cron (second run of each Melbourne calendar day)
+          # -> trigger enrich every day right after it
+          case "${{ github.event.schedule }}" in
+            "0 3 * * 0"|"0 4 * * 1"|"0 5 * * 2"|"0 6 * * 3"|"0 7 * * 4"|"0 8 * * 5"|"0 9 * * 6")
               SHOULD_RUN="true"
-            fi
-          fi
+              ;;
+          esac
 
           echo "should_run=$SHOULD_RUN" >> $GITHUB_OUTPUT
 
@@ -232,7 +258,7 @@ jobs:
           git add ${{ env.ENRICH_FILE }}
 
           git diff --cached --quiet || \
-            git commit -m "Enrich weekly - $(date -u +%Y-%m-%d) [skip ci]"
+            git commit -m "Enrich daily - $(date -u +%Y-%m-%d) [skip ci]"
 
           git pull origin main --rebase || true
           git push || true
