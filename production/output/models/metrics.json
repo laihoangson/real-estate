@@ -1,6 +1,6 @@
 {
   "trained_on": "full Sold (train+val+test)",
-  "training_run_date": "2026-06-28 10:39:31",
+  "training_run_date": "2026-06-28 21:10:01",
   "n_train": 85509,
   "n_val": 18323,
   "n_test": 18325,
