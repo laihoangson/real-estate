@@ -673,8 +673,8 @@ let mapMode = 'points';   // 'points' (signal) | 'asking' | 'choro'
 let hideNoAsking = false; // only used in 'asking' mode
 const map = L.map('map', { zoomControl: true, attributionControl: false, preferCanvas: true })
     .setView([-37.8136, 144.9631], 10);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-            { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            { subdomains: 'abc', maxZoom: 19 }).addTo(map);
 const markerLayer = L.layerGroup().addTo(map);
 let choroLayer = null;
 const legend = L.control({ position: 'bottomright' });
