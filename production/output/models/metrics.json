@@ -1,10 +1,10 @@
 {
   "trained_on": "full Sold (train+val+test)",
-  "training_run_date": "2026-10-04 22:56:28",
-  "n_train": 96180,
-  "n_val": 20610,
-  "n_test": 20610,
-  "n_full": 137400,
+  "training_run_date": "2026-10-11 23:33:24",
+  "n_train": 97078,
+  "n_val": 20802,
+  "n_test": 20804,
+  "n_full": 138684,
   "hyperparameters": {
     "n_estimators": 661,
     "max_depth": 8,
@@ -17,13 +17,13 @@
     "verbosity": 0
   },
   "validation_metrics": {
-    "rmse_aud": 215420.54150427523,
-    "mape": 11.993533144747195,
-    "r2": 0.8653638685634998
+    "rmse_aud": 212300.49937289636,
+    "mape": 11.941950546839108,
+    "r2": 0.8680956189181404
   },
   "test_metrics": {
-    "rmse_aud": 201970.57348113874,
-    "mape": 11.98764525933034,
-    "r2": 0.8481340204826934
+    "rmse_aud": 206153.8717988713,
+    "mape": 12.036710880419617,
+    "r2": 0.8472970857347774
   }
 }
