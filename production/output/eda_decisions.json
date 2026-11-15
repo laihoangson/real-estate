@@ -1,5 +1,5 @@
 {
-  "data_snapshot_date": "2026-11-07",
+  "data_snapshot_date": "2026-11-14",
   "land_property_types": [
     "Development Site",
     "Farm",
@@ -61,15 +61,15 @@
   "landsize_caps_by_type": {
     "House": 40500.0,
     "Vacant land": 202300.0,
-    "Rural": 1953838.0,
+    "Rural": 1953656.0,
     "Acreage / Semi-Rural": 1385034.0,
-    "Apartment / Unit / Flat": 5108.0,
-    "Townhouse": 777.0,
-    "New land": 8716.0,
+    "Apartment / Unit / Flat": 5089.0,
+    "Townhouse": 774.0,
+    "New land": 8579.0,
     "Development Site": 45532.0,
     "Farm": 842160.0,
     "Villa": 263045.0,
-    "New House & Land": 2903.0,
+    "New House & Land": 2888.0,
     "New Apartments / Off the Plan": 2565.0,
     "Block of Units": 3369.0,
     "Semi-Detached": 677.0,
