@@ -171,6 +171,7 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
 .leaflet-popup-tip { background: var(--surface) !important; }
 .leaflet-popup-close-button { color: var(--text-muted) !important; font-size: 18px !important; padding: 8px 10px !important; }
 .leaflet-popup-content { margin: 0 !important; }
+.leaflet-control-zoom-reset { font-size: 18px !important; font-weight: 700; }
 
 .popup-body { font-family: 'DM Sans', sans-serif; min-width: 260px; padding: 16px; }
 .popup-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
@@ -429,7 +430,7 @@ body { background: var(--bg); font-family: 'DM Sans', sans-serif; color: var(--t
             <div class="panel-head">
                 <span class="panel-title">Valuation Map</span>
                 <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-                    <label class="check-toggle hidden" id="hideNoAskWrap">
+                    <label class="check-toggle" id="hideNoAskWrap">
                         <input type="checkbox" id="hideNoAskChk">
                         Hide no-asking
                     </label>
@@ -671,13 +672,32 @@ const SCATTER_X_LABELS = {
 };
 
 let mapMode = 'points';   // 'points' (signal) | 'asking' | 'choro'
-let hideNoAsking = false; // only used in 'asking' mode
+let hideNoAsking = false; // used in both point modes ('points' and 'asking')
 const map = L.map('map', { zoomControl: true, attributionControl: false, preferCanvas: true })
     .setView([-37.8136, 144.9631], 10);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
             { subdomains: 'abc', maxZoom: 19 }).addTo(map);
-const markerLayer = L.layerGroup().addTo(map);
-let choroLayer = null;
+// Reset-view button, docked under the +/- zoom buttons
+const MAP_HOME = { center: [-37.8136, 144.9631], zoom: 10 };
+(function addResetButton() {
+    const bar = map.zoomControl.getContainer();
+    const btn = L.DomUtil.create('a', 'leaflet-control-zoom-reset', bar);
+    btn.href = '#';
+    btn.title = 'Reset view';
+    btn.setAttribute('role', 'button');
+    btn.setAttribute('aria-label', 'Reset view');
+    btn.innerHTML = '&#x21BA;';
+    L.DomEvent.disableClickPropagation(btn);
+    L.DomEvent.on(btn, 'click', e => {
+        L.DomEvent.preventDefault(e);
+        map.closePopup();
+        map.setView(MAP_HOME.center, MAP_HOME.zoom);
+    });
+})();
+let markerLayer = L.layerGroup().addTo(map);
+const markerCache = new WeakMap(); // row -> circleMarker, reused across filter changes
+let lastRadius = null;
+let choroLayer = null, choroBase = null;
 const legend = L.control({ position: 'bottomright' });
 let charts = {};
 
@@ -731,6 +751,7 @@ function updateLegend() {
     if (mapMode === 'points') {
         let html = '<div class="mlegend-title">Deal Signal</div>';
         for (const [k, c] of Object.entries(SIGNAL_COLORS)) {
+            if (hideNoAsking && k === 'No Asking Price') continue;
             html += `<div class="mlegend-row"><span class="mlegend-dot" style="background:${c}"></span>${k}</div>`;
         }
         div.innerHTML = html;
@@ -1046,16 +1067,21 @@ function buildPopupHTML(row) {
 }
 
 function renderMap(data) {
-    markerLayer.clearLayers();
+    // Swap the whole group off the map at once instead of removing 50k markers one by one.
+    map.removeLayer(markerLayer);
+    markerLayer = L.layerGroup();
     if (choroLayer) { map.removeLayer(choroLayer); choroLayer = null; }
 
     if (mapMode === 'points' || mapMode === 'asking') {
         const r0 = dotRadius(map.getZoom());
+        const batch = [];
 
-        // For asking mode: optionally filter out listings with no asking price
+        // Optionally hide listings with no asking price (same rule the colouring uses in each mode)
         let pointsData = data;
-        if (mapMode === 'asking' && hideNoAsking) {
-            pointsData = data.filter(r => r.Numeric_Price != null && !isNaN(r.Numeric_Price) && r.Numeric_Price > 0);
+        if (hideNoAsking) {
+            pointsData = mapMode === 'points'
+                ? data.filter(r => (r.Deal_Signal || 'No Asking Price') !== 'No Asking Price')
+                : data.filter(r => r.Numeric_Price != null && !isNaN(r.Numeric_Price) && r.Numeric_Price > 0);
         }
 
         pointsData.forEach(row => {
@@ -1073,14 +1099,31 @@ function renderMap(data) {
                 }
             }
 
-            L.circleMarker([row.Latitude, row.Longitude], {
-                radius: r0, fillColor: color, color: 'rgba(255,255,255,0.7)',
-                weight: 1, opacity: 1, fillOpacity: 0.85,
-            }).bindPopup(buildPopupHTML(row), { maxWidth: 300 }).addTo(markerLayer);
+            // Reuse the marker built for this row last time; only restyle if needed.
+            let m = markerCache.get(row);
+            if (!m) {
+                m = L.circleMarker([row.Latitude, row.Longitude], {
+                    radius: r0, fillColor: color, color: 'rgba(255,255,255,0.7)',
+                    weight: 1, opacity: 1, fillOpacity: 0.85,
+                }).bindPopup(() => buildPopupHTML(row), { maxWidth: 300 }); // popup HTML built on click
+                markerCache.set(row, m);
+            } else {
+                if (m.options.fillColor !== color) m.setStyle({ fillColor: color });
+                if (m.options.radius !== r0) m.setRadius(r0);
+            }
+            batch.push(m);
         });
+        markerLayer = L.layerGroup(batch).addTo(map);
+        lastRadius = r0;
     } else {
         if (!geojsonData) return;
-        choroLayer = L.geoJSON(geojsonData, {
+        // Parsing 3.7 MB of polygons is expensive, so build the layer once and just restyle it.
+        if (choroBase) {
+            choroLayer = choroBase.addTo(map);
+            choroBase.setStyle(choroBase.options.style);
+            return;
+        }
+        choroLayer = choroBase = L.geoJSON(geojsonData, {
             style: feat => {
                 const name = String(feat.properties.Suburb || feat.properties.suburb || '').toUpperCase();
                 const stats = cachedSuburbStats[name];
@@ -1095,8 +1138,8 @@ function renderMap(data) {
             },
             onEachFeature: (feat, layer) => {
                 const name = String(feat.properties.Suburb || feat.properties.suburb || '').toUpperCase();
-                const stats = cachedSuburbStats[name];
-                const tt = stats ?
+                // Tooltip is built on hover so it always reflects the current filter.
+                const tt = () => { const stats = cachedSuburbStats[name]; return stats ?
                     `<div class="choro-tooltip">
                         <div class="choro-title">${name}</div>
                         <div class="choro-stat"><span>Listings</span><b>${stats.count}</b></div>
@@ -1106,10 +1149,10 @@ function renderMap(data) {
                         <div class="choro-stat"><span>Min predicted</span><b>${fmtMoneyFull(stats.min)}</b></div>
                         <div class="choro-stat"><span>Max predicted</span><b>${fmtMoneyFull(stats.max)}</b></div>
                     </div>` :
-                    `<div class="choro-tooltip"><div class="choro-title">${name}</div><div class="choro-stat">No listings in filter</div></div>`;
+                    `<div class="choro-tooltip"><div class="choro-title">${name}</div><div class="choro-stat">No listings in filter</div></div>`; };
                 layer.bindTooltip(tt, { sticky: true, direction: 'top' });
                 layer.on('mouseover', () => layer.setStyle({ weight: 2.5, color: '#1a1d27' }));
-                layer.on('mouseout', () => choroLayer.resetStyle(layer));
+                layer.on('mouseout', () => choroBase.resetStyle(layer));
                 layer.on('click', () => setSuburb(name));
             }
         }).addTo(map);
@@ -1119,6 +1162,8 @@ function renderMap(data) {
 map.on('zoomend', () => {
     if (mapMode === 'points' || mapMode === 'asking') {
         const r = dotRadius(map.getZoom());
+        if (r === lastRadius) return; // radius only changes at a few zoom steps
+        lastRadius = r;
         markerLayer.eachLayer(l => { if (l.setRadius) l.setRadius(r); });
     }
 });
@@ -1130,8 +1175,8 @@ function setMapMode(mode) {
     document.getElementById('btnMapPoints').classList.toggle('active', mode === 'points');
     document.getElementById('btnMapAsking').classList.toggle('active', mode === 'asking');
     document.getElementById('btnMapChoro').classList.toggle('active',  mode === 'choro');
-    // Show "Hide no-asking" toggle only in asking mode
-    document.getElementById('hideNoAskWrap').classList.toggle('hidden', mode !== 'asking');
+    // Show "Hide no-asking" toggle in both point modes
+    document.getElementById('hideNoAskWrap').classList.toggle('hidden', mode === 'choro');
     updateLegend();
     renderMap(filteredData);
 }
